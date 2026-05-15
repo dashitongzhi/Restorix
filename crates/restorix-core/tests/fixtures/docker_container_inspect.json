@@ -1,0 +1,18 @@
+[
+  {
+    "Id": "abc123",
+    "Mounts": [
+      {
+        "Type": "volume",
+        "Name": "postgres_data",
+        "Source": "/var/lib/docker/volumes/postgres_data/_data",
+        "Destination": "/var/lib/postgresql/data",
+        "Driver": "local",
+        "Mode": "rw",
+        "RW": true,
+        "Propagation": ""
+      }
+    ]
+  }
+]
+

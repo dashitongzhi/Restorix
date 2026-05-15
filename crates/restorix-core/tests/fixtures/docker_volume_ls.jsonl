@@ -1,0 +1,3 @@
+{"Driver":"local","Labels":"","Links":"N/A","Mountpoint":"/var/lib/docker/volumes/postgres_data/_data","Name":"postgres_data","Scope":"local","Size":"N/A"}
+{"Driver":"local","Labels":"","Links":"N/A","Mountpoint":"/var/lib/docker/volumes/n8n_data/_data","Name":"n8n_data","Scope":"local","Size":"N/A"}
+

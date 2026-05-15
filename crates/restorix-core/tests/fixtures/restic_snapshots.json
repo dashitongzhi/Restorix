@@ -1,0 +1,27 @@
+[
+  {
+    "time": "2026-05-15T00:00:00Z",
+    "tree": "tree1",
+    "paths": [
+      "/var/lib/docker/volumes/postgres_data/_data"
+    ],
+    "hostname": "homelab",
+    "username": "kral",
+    "uid": 501,
+    "gid": 20,
+    "id": "abc123snapshot",
+    "short_id": "abc123",
+    "tags": ["docker"]
+  },
+  {
+    "time": "2026-05-10T00:00:00Z",
+    "tree": "tree2",
+    "paths": [
+      "/var/lib/docker/volumes/n8n_data"
+    ],
+    "hostname": "homelab",
+    "id": "stale456snapshot",
+    "short_id": "stale456"
+  }
+]
+
