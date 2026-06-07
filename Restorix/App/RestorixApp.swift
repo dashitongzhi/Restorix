@@ -32,7 +32,7 @@ struct RestorixApp: App {
         Settings {
             SettingsView()
                 .environmentObject(appViewModel)
-                .frame(width: 560, height: 360)
+                .frame(width: 560, height: 500)
         }
     }
 }

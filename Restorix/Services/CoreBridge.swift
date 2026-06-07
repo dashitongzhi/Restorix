@@ -2,6 +2,7 @@ import Foundation
 
 final class CoreBridge {
     private let cliURLOverride: URL?
+    private let commandTimeoutSeconds: TimeInterval = 180
 
     init(cliURL: URL? = nil) {
         self.cliURLOverride = cliURL
@@ -15,6 +16,23 @@ final class CoreBridge {
     func listRepositories() async throws -> [BackupRepository] {
         let data = try await run(arguments: ["repo", "list", "--json"])
         return try JSONDecoder.restorix.decode([BackupRepository].self, from: data)
+    }
+
+    func removeRepository(id: String) async throws -> Bool {
+        let data = try await run(arguments: ["repo", "remove", id])
+        let result = try JSONDecoder.restorix.decode(RemoveRepositoryResult.self, from: data)
+        return result.removed
+    }
+
+    func setRepositoryEnabled(id: String, enabled: Bool) async throws -> BackupRepository {
+        let command = enabled ? "enable" : "disable"
+        let data = try await run(arguments: ["repo", command, id])
+        return try JSONDecoder.restorix.decode(BackupRepository.self, from: data)
+    }
+
+    func testRepository(id: String) async throws -> [BackupSnapshot] {
+        let data = try await run(arguments: ["repo", "test", id, "--json"])
+        return try JSONDecoder.restorix.decode([BackupSnapshot].self, from: data)
     }
 
     func addRepository(name: String, location: String, passwordEnvKey: String?, enabled: Bool) async throws -> BackupRepository {
@@ -55,6 +73,7 @@ final class CoreBridge {
             let stdout = Pipe()
             let stderr = Pipe()
             let cliURL = resolveCLIURL()
+            let commandTimeoutSeconds = self.commandTimeoutSeconds
 
             process.executableURL = cliURL
             process.arguments = arguments
@@ -64,22 +83,49 @@ final class CoreBridge {
                 "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
             ]) { current, _ in current }
 
+            let state = ProcessRunState()
+            let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
+            timer.schedule(deadline: .now() + commandTimeoutSeconds)
+            timer.setEventHandler {
+                guard process.isRunning else { return }
+                process.terminate()
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
+                    if process.isRunning {
+                        process.interrupt()
+                    }
+                }
+                state.finish {
+                    continuation.resume(
+                        throwing: CoreBridgeError.commandTimedOut(arguments.joined(separator: " "), Int(commandTimeoutSeconds))
+                    )
+                }
+            }
+            timer.resume()
+
             process.terminationHandler = { process in
+                timer.cancel()
                 let outputData = stdout.fileHandleForReading.readDataToEndOfFile()
                 let errorData = stderr.fileHandleForReading.readDataToEndOfFile()
 
                 if process.terminationStatus == 0 {
-                    continuation.resume(returning: outputData)
+                    state.finish {
+                        continuation.resume(returning: outputData)
+                    }
                 } else {
                     let errorText = String(decoding: errorData, as: UTF8.self)
-                    continuation.resume(throwing: CoreBridgeError.commandFailed(errorText))
+                    state.finish {
+                        continuation.resume(throwing: CoreBridgeError.commandFailed(errorText))
+                    }
                 }
             }
 
             do {
                 try process.run()
             } catch {
-                continuation.resume(throwing: CoreBridgeError.launchFailed(cliURL.path, error.localizedDescription))
+                timer.cancel()
+                state.finish {
+                    continuation.resume(throwing: CoreBridgeError.launchFailed(cliURL.path, error.localizedDescription))
+                }
             }
         }
     }
@@ -144,15 +190,36 @@ final class CoreBridge {
 
 enum CoreBridgeError: LocalizedError {
     case commandFailed(String)
+    case commandTimedOut(String, Int)
     case launchFailed(String, String)
 
     var errorDescription: String? {
         switch self {
         case .commandFailed(let message):
             return message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Restorix command failed." : message
+        case .commandTimedOut(let command, let seconds):
+            return "Restorix command timed out after \(seconds)s: \(command)"
         case .launchFailed(let path, let message):
             return "Restorix could not launch the CLI at \(path). \(message)"
         }
+    }
+}
+
+private final class ProcessRunState: @unchecked Sendable {
+    private let lock = NSLock()
+    nonisolated(unsafe)
+    private var finished = false
+
+    nonisolated
+    func finish(_ action: () -> Void) {
+        lock.lock()
+        if finished {
+            lock.unlock()
+            return
+        }
+        finished = true
+        lock.unlock()
+        action()
     }
 }
 
@@ -160,4 +227,8 @@ extension JSONDecoder {
     static var restorix: JSONDecoder {
         JSONDecoder()
     }
+}
+
+private struct RemoveRepositoryResult: Codable {
+    let removed: Bool
 }

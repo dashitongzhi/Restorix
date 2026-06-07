@@ -59,6 +59,14 @@ pub fn remove_repository(config_store: &ConfigStore, repo_id: &str) -> Result<bo
     config_store.remove_repository(repo_id)
 }
 
+pub fn set_repository_enabled(
+    config_store: &ConfigStore,
+    repo_id: &str,
+    enabled: bool,
+) -> Result<BackupRepository> {
+    config_store.set_repository_enabled(repo_id, enabled)
+}
+
 pub fn test_repository(config_store: &ConfigStore, repo_id: &str) -> Result<Vec<BackupSnapshot>> {
     let config = config_store.load()?;
     let repo = config

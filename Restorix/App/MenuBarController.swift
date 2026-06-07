@@ -38,7 +38,8 @@ final class MenuBarController: NSObject {
         guard let button = statusItem.button else { return }
         let imageName = appViewModel?.isScanning == true ? "arrow.triangle.2.circlepath" : "externaldrive.connected.to.line.below"
         button.image = NSImage(systemSymbolName: imageName, accessibilityDescription: "Restorix")
-        button.imagePosition = .imageOnly
+        button.title = statusBarTitle
+        button.imagePosition = .imageLeft
         button.contentTintColor = color(for: appViewModel?.overallStatus ?? .Unknown)
         button.toolTip = tooltip
     }
@@ -51,8 +52,10 @@ final class MenuBarController: NSObject {
         menu.addItem(disabledTitle(overallLine))
         menu.addItem(disabledTitle(statusLine(summary)))
         menu.addItem(disabledTitle(lastScanLine(summary)))
+        addRiskPreview(to: menu)
         menu.addItem(.separator())
         menu.addItem(actionItem(text(.openDashboard), #selector(openDashboard)))
+        menu.addItem(actionItem(text(.openVolumes), #selector(openVolumes), enabled: appViewModel?.scanResult != nil))
         menu.addItem(actionItem(appViewModel?.isScanning == true ? text(.scanning) : text(.scanNow), #selector(scanNow), enabled: appViewModel?.isScanning != true))
         menu.addItem(actionItem(text(.exportReport), #selector(exportReport), enabled: appViewModel?.scanResult != nil))
         menu.addItem(.separator())
@@ -65,9 +68,46 @@ final class MenuBarController: NSObject {
         statusItem.menu = menu
     }
 
+    private var statusBarTitle: String {
+        guard let summary = appViewModel?.scanResult?.summary else {
+            return appViewModel?.isScanning == true ? "..." : ""
+        }
+
+        if summary.errorCount > 0 || summary.unprotectedCount > 0 {
+            return " \(summary.unprotectedCount + summary.errorCount)!"
+        }
+
+        if summary.staleCount > 0 {
+            return " \(summary.staleCount)"
+        }
+
+        if summary.unknownCount > 0 {
+            return " \(summary.unknownCount)?"
+        }
+
+        return " OK"
+    }
+
     private func statusLine(_ summary: ScanSummary?) -> String {
         guard let summary else { return text(.statusNotScanned) }
-        return "\(text(.statusLine)): \(summary.protectedCount) \(text(.protected)), \(summary.unprotectedCount) \(text(.unprotected)), \(summary.staleCount) \(text(.stale))"
+        return "\(text(.statusLine)): \(summary.protectedCount) \(text(.protected)), \(summary.unprotectedCount) \(text(.unprotected)), \(summary.staleCount) \(text(.stale)), \(summary.unknownCount) \(text(.unknown))"
+    }
+
+    private func addRiskPreview(to menu: NSMenu) {
+        guard let items = appViewModel?.scanResult?.volumeHealth.filter({
+            $0.status == .Unprotected || $0.status == .Stale || $0.status == .Unknown || $0.status == .Error
+        }), !items.isEmpty else {
+            return
+        }
+
+        menu.addItem(.separator())
+        for item in items.prefix(4) {
+            menu.addItem(disabledTitle("• \(item.volume.name): \(statusText(item.status))"))
+        }
+
+        if items.count > 4 {
+            menu.addItem(disabledTitle("+ \(items.count - 4) \(text(.volumes))"))
+        }
     }
 
     private func lastScanLine(_ summary: ScanSummary?) -> String {
@@ -98,6 +138,21 @@ final class MenuBarController: NSObject {
 
     private func text(_ key: L10nKey) -> String {
         appViewModel?.text(key) ?? AppStrings.text(key, language: .english)
+    }
+
+    private func statusText(_ status: HealthStatus) -> String {
+        switch status {
+        case .Protected:
+            return text(.protected)
+        case .Unprotected:
+            return text(.unprotected)
+        case .Stale:
+            return text(.stale)
+        case .Unknown:
+            return text(.unknown)
+        case .Error:
+            return text(.error)
+        }
     }
 
     private func disabledTitle(_ title: String) -> NSMenuItem {
@@ -140,6 +195,12 @@ final class MenuBarController: NSObject {
 
     @objc private func openDashboard() {
         appViewModel?.selectedSidebarItem = .dashboard
+        openDashboardWindow()
+        WindowManager.openDashboard()
+    }
+
+    @objc private func openVolumes() {
+        appViewModel?.selectedSidebarItem = .volumes
         openDashboardWindow()
         WindowManager.openDashboard()
     }
