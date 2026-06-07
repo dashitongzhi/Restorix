@@ -4,6 +4,7 @@ struct SettingsView: View {
     @EnvironmentObject private var app: AppViewModel
     @State private var staleHours = 72
     @State private var looseMatching = false
+    @State private var showDockIcon = true
     @State private var notificationsEnabled = false
     @State private var cliPath = ""
 
@@ -21,12 +22,28 @@ struct SettingsView: View {
                 .pickerStyle(.segmented)
             }
 
+            Section(app.text(.appIcon)) {
+                HStack(spacing: 12) {
+                    ForEach(AppIconChoice.allCases) { icon in
+                        IconChoiceButton(
+                            icon: icon,
+                            isSelected: app.selectedAppIcon == icon,
+                            title: app.text(icon.titleKey)
+                        ) {
+                            app.selectAppIcon(icon)
+                        }
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
             Section(app.text(.scanSettings)) {
                 Stepper(value: $staleHours, in: 1...720) {
                     Text("\(app.text(.staleThreshold)): \(staleHours) \(app.text(.hours))")
                 }
                 Toggle(app.text(.looseMatching), isOn: $looseMatching)
                 Toggle(app.text(.localNotifications), isOn: $notificationsEnabled)
+                Toggle(app.text(.showDockIcon), isOn: $showDockIcon)
             }
 
             Section(app.text(.cli)) {
@@ -59,6 +76,7 @@ struct SettingsView: View {
         guard let settings = app.settings else { return }
         staleHours = settings.staleHours
         looseMatching = settings.looseMatching
+        showDockIcon = settings.showDockIcon
         notificationsEnabled = settings.notificationsEnabled
         cliPath = settings.cliPath
     }
@@ -67,6 +85,41 @@ struct SettingsView: View {
         await app.setConfig(key: "stale_hours", value: String(staleHours))
         await app.setConfig(key: "loose_matching", value: looseMatching ? "true" : "false")
         await app.setConfig(key: "notifications_enabled", value: notificationsEnabled ? "true" : "false")
+        await app.setConfig(key: "show_dock_icon", value: showDockIcon ? "true" : "false")
         await app.setConfig(key: "cli_path", value: cliPath)
+    }
+}
+
+private struct IconChoiceButton: View {
+    let icon: AppIconChoice
+    let isSelected: Bool
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                Image(icon.assetName)
+                    .resizable()
+                    .aspectRatio(1, contentMode: .fit)
+                    .frame(width: 64, height: 64)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
+
+                Text(title)
+                    .font(.caption)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(.primary)
+            .frame(width: 96, height: 96)
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 2)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
     }
 }

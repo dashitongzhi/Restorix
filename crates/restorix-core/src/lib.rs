@@ -2,6 +2,7 @@ pub mod commands;
 pub mod docker;
 pub mod error;
 pub mod models;
+pub mod process;
 pub mod report;
 pub mod restic;
 pub mod scanner;

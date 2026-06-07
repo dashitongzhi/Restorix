@@ -20,6 +20,11 @@ enum L10nKey: String {
     case add
     case addRepository
     case allProtected
+    case appIcon
+    case appIconDefault
+    case appIconDimensional
+    case appIconGlass
+    case appIconNeon
     case backupHealthUnknown
     case backupNeedsAttention
     case cancel
@@ -40,6 +45,8 @@ enum L10nKey: String {
     case dockerStartTitle
     case enabled
     case disabled
+    case enable
+    case disable
     case error
     case exportReport
     case generate
@@ -71,6 +78,7 @@ enum L10nKey: String {
     case notScanned
     case nextSteps
     case openDashboard
+    case openVolumes
     case productSubtitle
     case passwordEnv
     case protected
@@ -114,6 +122,14 @@ enum L10nKey: String {
     case quit
     case never
     case repository
+    case remove
+    case removeRepository
+    case repositoryReady
+    case repositoryTestFailed
+    case showDockIcon
+    case snapshots
+    case testRepository
+    case testing
 }
 
 enum AppStrings {
@@ -134,6 +150,11 @@ enum AppStrings {
         .add: "Add",
         .addRepository: "Add Restic Repository",
         .allProtected: "All protected",
+        .appIcon: "App Icon",
+        .appIconDefault: "Default",
+        .appIconDimensional: "Dimensional",
+        .appIconGlass: "Glass",
+        .appIconNeon: "Neon",
         .backupHealthUnknown: "Backup health unknown",
         .backupNeedsAttention: "Backup needs attention",
         .cancel: "Cancel",
@@ -154,6 +175,8 @@ enum AppStrings {
         .dockerStartTitle: "Start Docker or OrbStack",
         .enabled: "Enabled",
         .disabled: "Disabled",
+        .enable: "Enable",
+        .disable: "Disable",
         .error: "Error",
         .exportReport: "Export Report",
         .generate: "Generate",
@@ -185,6 +208,7 @@ enum AppStrings {
         .notScanned: "Not scanned",
         .nextSteps: "Next Steps",
         .openDashboard: "Open Dashboard",
+        .openVolumes: "Open Volumes",
         .productSubtitle: "Restorix checks whether Docker volumes are actually restorable.",
         .passwordEnv: "Password env",
         .protected: "Protected",
@@ -227,13 +251,26 @@ enum AppStrings {
         .envNameOnly: "Restorix stores the environment variable name, not your password.",
         .quit: "Quit",
         .never: "Never",
-        .repository: "Repository"
+        .repository: "Repository",
+        .remove: "Remove",
+        .removeRepository: "Remove Repository",
+        .repositoryReady: "Repository is reachable",
+        .repositoryTestFailed: "Repository test failed",
+        .showDockIcon: "Show Dock icon",
+        .snapshots: "snapshots",
+        .testRepository: "Test Repository",
+        .testing: "Testing"
     ]
 
     private static let simplifiedChinese: [L10nKey: String] = [
         .add: "添加",
         .addRepository: "添加 Restic 仓库",
         .allProtected: "全部已保护",
+        .appIcon: "应用图标",
+        .appIconDefault: "默认",
+        .appIconDimensional: "立体",
+        .appIconGlass: "玻璃",
+        .appIconNeon: "霓虹",
         .backupHealthUnknown: "备份健康状态未知",
         .backupNeedsAttention: "备份需要关注",
         .cancel: "取消",
@@ -254,6 +291,8 @@ enum AppStrings {
         .dockerStartTitle: "启动 Docker 或 OrbStack",
         .enabled: "已启用",
         .disabled: "已停用",
+        .enable: "启用",
+        .disable: "停用",
         .error: "错误",
         .exportReport: "导出报告",
         .generate: "生成",
@@ -285,6 +324,7 @@ enum AppStrings {
         .notScanned: "未扫描",
         .nextSteps: "下一步",
         .openDashboard: "打开仪表盘",
+        .openVolumes: "打开 Volumes",
         .productSubtitle: "Restorix 会检查 Docker volumes 是否真的可恢复。",
         .passwordEnv: "密码环境变量",
         .protected: "已保护",
@@ -327,6 +367,14 @@ enum AppStrings {
         .envNameOnly: "Restorix 只保存环境变量名称，不保存你的密码。",
         .quit: "退出",
         .never: "从未",
-        .repository: "仓库"
+        .repository: "仓库",
+        .remove: "删除",
+        .removeRepository: "删除仓库",
+        .repositoryReady: "仓库可访问",
+        .repositoryTestFailed: "仓库测试失败",
+        .showDockIcon: "显示 Dock 图标",
+        .snapshots: "个 snapshots",
+        .testRepository: "测试仓库",
+        .testing: "测试中"
     ]
 }

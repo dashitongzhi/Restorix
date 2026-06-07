@@ -3,7 +3,12 @@ use crate::docker::parser::{
 };
 use crate::error::{RestorixError, Result};
 use crate::models::{DockerContainer, DockerVolume};
+use crate::process::run_with_timeout;
 use std::process::Command;
+use std::time::Duration;
+
+const DOCKER_CHECK_TIMEOUT: Duration = Duration::from_secs(5);
+const DOCKER_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone)]
 pub struct DockerStatus {
@@ -34,16 +39,22 @@ impl DockerClient {
             };
         }
 
-        let version = Command::new("docker")
-            .arg("--version")
-            .output()
-            .ok()
-            .filter(|output| output.status.success())
-            .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string());
+        let mut version_command = Command::new("docker");
+        version_command.arg("--version");
+        let version =
+            run_with_timeout(version_command, "docker", "--version", DOCKER_CHECK_TIMEOUT)
+                .ok()
+                .filter(|output| output.status.success())
+                .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string());
 
-        let info = Command::new("docker")
-            .args(["info", "--format", "{{json .}}"])
-            .output();
+        let mut info_command = Command::new("docker");
+        info_command.args(["info", "--format", "{{json .}}"]);
+        let info = run_with_timeout(
+            info_command,
+            "docker",
+            "info --format {{json .}}",
+            DOCKER_CHECK_TIMEOUT,
+        );
 
         match info {
             Ok(output) if output.status.success() => DockerStatus {
@@ -58,11 +69,13 @@ impl DockerClient {
                 version,
                 message: Some(docker_not_running_message(&output.stderr)),
             },
-            Err(_) => DockerStatus {
+            Err(error) => DockerStatus {
                 installed: true,
                 running: false,
                 version,
-                message: Some("Docker is installed but not running. Please open Docker Desktop and try again.".to_string()),
+                message: Some(format!(
+                    "Docker is installed but Restorix could not confirm the daemon is running. {error}"
+                )),
             },
         }
     }
@@ -117,7 +130,9 @@ fn ensure_docker_running(client: &DockerClient) -> Result<()> {
 }
 
 fn run_docker(args: &[&str]) -> Result<String> {
-    let output = Command::new("docker").args(args).output()?;
+    let mut command = Command::new("docker");
+    command.args(args);
+    let output = run_with_timeout(command, "docker", &args.join(" "), DOCKER_COMMAND_TIMEOUT)?;
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
     } else {

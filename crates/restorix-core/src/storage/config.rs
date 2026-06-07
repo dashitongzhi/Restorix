@@ -66,10 +66,19 @@ impl ConfigStore {
         }
 
         let data = fs::read_to_string(&self.path)?;
-        serde_json::from_str(&data).map_err(|source| RestorixError::JsonParse {
-            context: self.path.display().to_string(),
-            source,
-        })
+        if data.trim().is_empty() {
+            return Ok(AppConfig::default());
+        }
+
+        match serde_json::from_str(&data) {
+            Ok(config) => Ok(config),
+            Err(_) => {
+                self.backup_broken_config(&data)?;
+                let config = AppConfig::default();
+                self.save(&config)?;
+                Ok(config)
+            }
+        }
     }
 
     pub fn save(&self, config: &AppConfig) -> Result<()> {
@@ -119,6 +128,22 @@ impl ConfigStore {
         Ok(removed)
     }
 
+    pub fn set_repository_enabled(&self, repo_id: &str, enabled: bool) -> Result<BackupRepository> {
+        let mut config = self.load()?;
+        let now = Utc::now().to_rfc3339();
+        let repo = config
+            .repositories
+            .iter_mut()
+            .find(|repo| repo.id == repo_id)
+            .ok_or_else(|| RestorixError::Config(format!("Repository not found: {repo_id}")))?;
+
+        repo.enabled = enabled;
+        repo.updated_at = now;
+        let updated = repo.clone();
+        self.save(&config)?;
+        Ok(updated)
+    }
+
     pub fn set_value(&self, key: &str, value: &str) -> Result<AppConfig> {
         let mut config = self.load()?;
         match key {
@@ -150,6 +175,19 @@ impl ConfigStore {
         }
         self.save(&config)?;
         Ok(config)
+    }
+
+    fn backup_broken_config(&self, data: &str) -> Result<()> {
+        let file_name = self
+            .path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("config.json");
+        let timestamp = Utc::now().format("%Y%m%dT%H%M%SZ");
+        let backup_name = format!("{file_name}.broken-{timestamp}");
+        let backup_path = self.path.with_file_name(backup_name);
+        fs::write(backup_path, data)?;
+        Ok(())
     }
 }
 

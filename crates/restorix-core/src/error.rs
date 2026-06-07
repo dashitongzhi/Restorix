@@ -23,6 +23,13 @@ pub enum RestorixError {
         stderr: String,
     },
 
+    #[error("Command timed out after {seconds}s: {program} {args}")]
+    CommandTimedOut {
+        program: String,
+        args: String,
+        seconds: u64,
+    },
+
     #[error("JSON parse failed while reading {context}: {source}")]
     JsonParse {
         context: String,
