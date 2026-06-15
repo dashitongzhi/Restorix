@@ -137,7 +137,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "set -euo pipefail\nexport PATH=\"/opt/homebrew/bin:/usr/local/bin:$HOME/.cargo/bin:$PATH\"\ncd \"$SRCROOT\"\n\nif ! command -v cargo >/dev/null 2>&1; then\n  echo \"error: cargo is required to build the embedded restorix CLI.\" >&2\n  exit 1\nfi\n\nif [[ \"$CONFIGURATION\" == \"Release\" ]]; then\n  cargo build --release -p restorix-cli\n  CLI_SOURCE=\"$SRCROOT/target/release/restorix\"\nelse\n  cargo build -p restorix-cli\n  CLI_SOURCE=\"$SRCROOT/target/debug/restorix\"\nfi\n\nCLI_DEST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/restorix\"\nmkdir -p \"$(dirname \"$CLI_DEST\")\"\ncp \"$CLI_SOURCE\" \"$CLI_DEST\"\nchmod +x \"$CLI_DEST\"\necho \"Embedded restorix CLI at $CLI_DEST\"\n";
+			shellScript = "set -euo pipefail\nexport PATH=\"/opt/homebrew/bin:/usr/local/bin:$HOME/.cargo/bin:$PATH\"\ncd \"$SRCROOT\"\n\nif ! command -v cargo >/dev/null 2>&1; then\n  echo \"error: cargo is required to build the embedded restorix CLI.\" >&2\n  exit 1\nfi\n\nif [[ \"$CONFIGURATION\" == \"Release\" ]]; then\n  cargo build --release -p restorix-cli\n  CLI_SOURCE=\"$SRCROOT/target/release/restorix\"\nelse\n  cargo build -p restorix-cli\n  CLI_SOURCE=\"$SRCROOT/target/debug/restorix\"\nfi\n\nCLI_DEST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/restorix\"\nmkdir -p \"$(dirname \"$CLI_DEST\")\"\ncp \"$CLI_SOURCE\" \"$CLI_DEST\"\nchmod +x \"$CLI_DEST\"\necho \"Embedded restorix CLI payload at $CLI_DEST\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

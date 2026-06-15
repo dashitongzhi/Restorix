@@ -4,7 +4,15 @@ import SwiftUI
 struct RestorixApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @Environment(\.openWindow) private var openWindow
-    @StateObject private var appViewModel = AppViewModel()
+    @StateObject private var appViewModel: AppViewModel
+
+    init() {
+        let appViewModel = AppViewModel()
+        _appViewModel = StateObject(wrappedValue: appViewModel)
+        Task { @MainActor in
+            await appViewModel.loadConfig()
+        }
+    }
 
     var body: some Scene {
         WindowGroup("Restorix", id: "main") {

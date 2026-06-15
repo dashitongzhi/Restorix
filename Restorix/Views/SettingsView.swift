@@ -5,6 +5,7 @@ struct SettingsView: View {
     @State private var staleHours = 72
     @State private var looseMatching = false
     @State private var showDockIcon = true
+    @State private var launchAtLogin = false
     @State private var notificationsEnabled = false
     @State private var cliPath = ""
 
@@ -44,6 +45,7 @@ struct SettingsView: View {
                 Toggle(app.text(.looseMatching), isOn: $looseMatching)
                 Toggle(app.text(.localNotifications), isOn: $notificationsEnabled)
                 Toggle(app.text(.showDockIcon), isOn: $showDockIcon)
+                Toggle(app.text(.launchAtLogin), isOn: $launchAtLogin)
             }
 
             Section(app.text(.cli)) {
@@ -70,6 +72,7 @@ struct SettingsView: View {
             syncFromSettings()
         }
         .onChange(of: app.settings?.staleHours) { _, _ in syncFromSettings() }
+        .onChange(of: app.settings?.launchAtLogin) { _, _ in syncFromSettings() }
     }
 
     private func syncFromSettings() {
@@ -77,16 +80,26 @@ struct SettingsView: View {
         staleHours = settings.staleHours
         looseMatching = settings.looseMatching
         showDockIcon = settings.showDockIcon
+        launchAtLogin = settings.launchAtLogin
         notificationsEnabled = settings.notificationsEnabled
         cliPath = settings.cliPath
     }
 
     private func save() async {
-        await app.setConfig(key: "stale_hours", value: String(staleHours))
-        await app.setConfig(key: "loose_matching", value: looseMatching ? "true" : "false")
-        await app.setConfig(key: "notifications_enabled", value: notificationsEnabled ? "true" : "false")
-        await app.setConfig(key: "show_dock_icon", value: showDockIcon ? "true" : "false")
-        await app.setConfig(key: "cli_path", value: cliPath)
+        let nextStaleHours = staleHours
+        let nextLooseMatching = looseMatching
+        let nextNotificationsEnabled = notificationsEnabled
+        let nextShowDockIcon = showDockIcon
+        let nextLaunchAtLogin = launchAtLogin
+        let nextCLIPath = cliPath
+
+        await app.setConfig(key: "stale_hours", value: String(nextStaleHours))
+        await app.setConfig(key: "loose_matching", value: nextLooseMatching ? "true" : "false")
+        await app.setConfig(key: "notifications_enabled", value: nextNotificationsEnabled ? "true" : "false")
+        await app.setConfig(key: "show_dock_icon", value: nextShowDockIcon ? "true" : "false")
+        await app.setLaunchAtLogin(nextLaunchAtLogin)
+        await app.setConfig(key: "cli_path", value: nextCLIPath)
+        syncFromSettings()
     }
 }
 
