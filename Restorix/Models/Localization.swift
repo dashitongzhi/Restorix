@@ -60,6 +60,7 @@ enum L10nKey: String {
     case language
     case lastBackup
     case lastScan
+    case launchAtLogin
     case localNotifications
     case looseMatching
     case markdownReport
@@ -190,6 +191,7 @@ enum AppStrings {
         .language: "Language",
         .lastBackup: "Last Backup",
         .lastScan: "Last scan",
+        .launchAtLogin: "Open at login",
         .localNotifications: "Local notifications",
         .looseMatching: "Loose matching",
         .markdownReport: "Markdown Report",
@@ -306,6 +308,7 @@ enum AppStrings {
         .language: "语言",
         .lastBackup: "最近备份",
         .lastScan: "最近扫描",
+        .launchAtLogin: "登录时打开",
         .localNotifications: "本地通知",
         .looseMatching: "宽松匹配",
         .markdownReport: "Markdown 报告",

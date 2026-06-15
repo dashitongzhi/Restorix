@@ -65,6 +65,24 @@ fn empty_config_file_loads_defaults() {
 }
 
 #[test]
+fn updates_launch_at_login_setting() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let store = ConfigStore::new(temp_dir.path().join("config.json"));
+
+    let config = store.set_value("launch_at_login", "true").unwrap();
+    assert!(config.launch_at_login);
+
+    let loaded = store.load().unwrap();
+    assert!(loaded.launch_at_login);
+
+    let config = store.set_value("launch_at_login", "false").unwrap();
+    assert!(!config.launch_at_login);
+
+    let loaded = store.load().unwrap();
+    assert!(!loaded.launch_at_login);
+}
+
+#[test]
 fn broken_config_file_is_backed_up_and_defaults_are_loaded() {
     let temp_dir = tempfile::tempdir().unwrap();
     let path = temp_dir.path().join("config.json");

@@ -49,7 +49,11 @@ else
 fi
 
 /usr/bin/codesign --verify --deep --strict --verbose=2 "$BUILD_APP"
-"$CLI_DEST" --help >/dev/null
+CLI_CHECK="$(mktemp -t restorix-cli-check)"
+cp "$CLI_DEST" "$CLI_CHECK"
+chmod +x "$CLI_CHECK"
+"$CLI_CHECK" --help >/dev/null
+rm -f "$CLI_CHECK"
 
 rm -rf "$DIST_APP" "$DIST_ZIP" "$DIST_DMG"
 mkdir -p "$DIST_DIR"

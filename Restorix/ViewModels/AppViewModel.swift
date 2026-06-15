@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import AppKit
+import ServiceManagement
 
 @MainActor
 final class AppViewModel: ObservableObject {
@@ -134,7 +135,8 @@ final class AppViewModel: ObservableObject {
 
     func loadConfig() async {
         do {
-            settings = try await coreBridge.getConfig()
+            let loadedSettings = try await coreBridge.getConfig()
+            settings = await settingsByReconcilingLaunchAtLogin(loadedSettings)
             applyDockIconPreference(settings?.showDockIcon == true)
             applySelectedAppIcon()
         } catch {
@@ -144,7 +146,8 @@ final class AppViewModel: ObservableObject {
 
     func setConfig(key: String, value: String) async {
         do {
-            settings = try await coreBridge.setConfig(key: key, value: value)
+            let updatedSettings = try await coreBridge.setConfig(key: key, value: value)
+            settings = await settingsByReconcilingLaunchAtLogin(updatedSettings)
             if key == "show_dock_icon" {
                 applyDockIconPreference(settings?.showDockIcon == true)
             }
@@ -153,10 +156,59 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    func setLaunchAtLogin(_ enabled: Bool) async {
+        do {
+            try applyLaunchAtLoginPreference(enabled)
+        } catch {
+            lastError = error.localizedDescription
+        }
+
+        await refreshLaunchAtLoginSettingFromSystem()
+    }
+
     func applyDockIconPreference(_ showDockIcon: Bool) {
         NSApp.setActivationPolicy(showDockIcon ? .regular : .accessory)
         if showDockIcon {
             NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
+    func applyLaunchAtLoginPreference(_ enabled: Bool) throws {
+        let service = SMAppService.mainApp
+        if enabled {
+            if service.status != .enabled {
+                try service.register()
+            }
+        } else if service.status == .enabled || service.status == .requiresApproval {
+            try service.unregister()
+        }
+    }
+
+    private func refreshLaunchAtLoginSettingFromSystem() async {
+        guard let settings else {
+            await loadConfig()
+            return
+        }
+
+        self.settings = await settingsByReconcilingLaunchAtLogin(settings)
+    }
+
+    private func settingsByReconcilingLaunchAtLogin(_ loadedSettings: AppSettings) async -> AppSettings {
+        let systemEnabled = SMAppService.mainApp.status == .enabled
+        guard loadedSettings.launchAtLogin != systemEnabled else {
+            return loadedSettings
+        }
+
+        do {
+            return try await coreBridge.setConfig(
+                key: "launch_at_login",
+                value: systemEnabled ? "true" : "false"
+            )
+        } catch {
+            lastError = error.localizedDescription
+            var fallback = loadedSettings
+            fallback.launchAtLogin = systemEnabled
+            return fallback
         }
     }
 
