@@ -222,8 +222,7 @@ final class MenuBarController: NSObject {
     }
 
     @objc private func openSettings() {
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        NSApp.activate(ignoringOtherApps: true)
+        WindowManager.openSettings()
     }
 
     @objc private func quit() {

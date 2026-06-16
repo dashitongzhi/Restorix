@@ -5,12 +5,14 @@ struct NextStepRow: View {
     let title: String
     let detail: String
     let systemImage: String
+    let actionTitle: String?
     let commandToCopy: String?
+    let action: () -> Void
 
     @State private var copied = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .center, spacing: 12) {
             Image(systemName: systemImage)
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
@@ -27,15 +29,22 @@ struct NextStepRow: View {
 
             Spacer()
 
-            if let commandToCopy {
-                Button {
-                    Pasteboard.copy(commandToCopy)
-                    copied = true
-                } label: {
-                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+            HStack(spacing: 8) {
+                if let actionTitle {
+                    Button(actionTitle, action: action)
+                        .buttonStyle(.bordered)
                 }
-                .buttonStyle(.borderless)
-                .help(copied ? app.text(.copied) : app.text(.copyCommand))
+
+                if let commandToCopy {
+                    Button {
+                        Pasteboard.copy(commandToCopy)
+                        copied = true
+                    } label: {
+                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    }
+                    .buttonStyle(.borderless)
+                    .help(copied ? app.text(.copied) : app.text(.copyCommand))
+                }
             }
         }
         .padding(12)

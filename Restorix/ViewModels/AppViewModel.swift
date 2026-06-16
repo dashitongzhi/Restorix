@@ -12,6 +12,7 @@ final class AppViewModel: ObservableObject {
     @Published var isLoadingRepositories = false
     @Published var lastError: String?
     @Published var selectedSidebarItem: SidebarItem = .dashboard
+    @Published var isAddingRepository = false
     @Published var language: AppLanguage
     @Published var selectedAppIcon: AppIconChoice
 
@@ -72,6 +73,11 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    func beginAddingRepository() {
+        selectedSidebarItem = .repositories
+        isAddingRepository = true
+    }
+
     func addRepository(name: String, location: String, passwordEnvKey: String?, enabled: Bool) async {
         do {
             _ = try await coreBridge.addRepository(
@@ -81,6 +87,7 @@ final class AppViewModel: ObservableObject {
                 enabled: enabled
             )
             await loadRepositories()
+            await scanNow()
         } catch {
             lastError = error.localizedDescription
         }

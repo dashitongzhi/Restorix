@@ -2,7 +2,6 @@ import SwiftUI
 
 struct RepositoryListView: View {
     @EnvironmentObject private var app: AppViewModel
-    @State private var showingAddRepository = false
     @State private var testingRepositoryIDs = Set<String>()
     @State private var repositoryToRemove: BackupRepository?
     @State private var testMessage: String?
@@ -14,7 +13,7 @@ struct RepositoryListView: View {
                     .font(.title2.weight(.semibold))
                 Spacer()
                 Button {
-                    showingAddRepository = true
+                    app.beginAddingRepository()
                 } label: {
                     Label(app.text(.addRepository), systemImage: "plus")
                 }
@@ -27,7 +26,7 @@ struct RepositoryListView: View {
                     message: app.text(.noRepositoriesConfiguredMessage),
                     actionTitle: app.text(.addRepository)
                 ) {
-                    showingAddRepository = true
+                    app.beginAddingRepository()
                 }
             } else {
                 if let testMessage {
@@ -45,7 +44,7 @@ struct RepositoryListView: View {
             }
         }
         .padding(24)
-        .sheet(isPresented: $showingAddRepository) {
+        .sheet(isPresented: $app.isAddingRepository) {
             AddRepositoryView()
                 .environmentObject(app)
         }

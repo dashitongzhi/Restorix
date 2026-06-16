@@ -11,4 +11,9 @@ enum WindowManager {
             NSApp.windows.first?.makeKeyAndOrderFront(nil)
         }
     }
+
+    static func openSettings() {
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
 }

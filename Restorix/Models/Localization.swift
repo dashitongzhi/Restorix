@@ -30,6 +30,7 @@ enum L10nKey: String {
     case cancel
     case cli
     case cliPath
+    case chooseFolder
     case containers
     case copy
     case copyCommand
@@ -119,7 +120,9 @@ enum L10nKey: String {
     case stale
     case hours
     case cliHint
+    case configureCLI
     case envNameOnly
+    case openDocker
     case quit
     case never
     case repository
@@ -131,6 +134,7 @@ enum L10nKey: String {
     case snapshots
     case testRepository
     case testing
+    case reviewVolumes
 }
 
 enum AppStrings {
@@ -161,6 +165,7 @@ enum AppStrings {
         .cancel: "Cancel",
         .cli: "CLI",
         .cliPath: "CLI path",
+        .chooseFolder: "Choose...",
         .containers: "Containers",
         .copy: "Copy",
         .copyCommand: "Copy command",
@@ -250,7 +255,9 @@ enum AppStrings {
         .stale: "Stale",
         .hours: "hours",
         .cliHint: "Leave empty to use the bundled restorix binary or Homebrew fallback.",
+        .configureCLI: "Configure CLI",
         .envNameOnly: "Restorix stores the environment variable name, not your password.",
+        .openDocker: "Open Docker",
         .quit: "Quit",
         .never: "Never",
         .repository: "Repository",
@@ -261,7 +268,8 @@ enum AppStrings {
         .showDockIcon: "Show Dock icon",
         .snapshots: "snapshots",
         .testRepository: "Test Repository",
-        .testing: "Testing"
+        .testing: "Testing",
+        .reviewVolumes: "Review Volumes"
     ]
 
     private static let simplifiedChinese: [L10nKey: String] = [
@@ -278,6 +286,7 @@ enum AppStrings {
         .cancel: "取消",
         .cli: "CLI",
         .cliPath: "CLI 路径",
+        .chooseFolder: "选择...",
         .containers: "容器",
         .copy: "复制",
         .copyCommand: "复制命令",
@@ -367,7 +376,9 @@ enum AppStrings {
         .stale: "已过期",
         .hours: "小时",
         .cliHint: "留空时使用 App 内置的 restorix，或 Homebrew 路径中的 restorix。",
+        .configureCLI: "配置 CLI",
         .envNameOnly: "Restorix 只保存环境变量名称，不保存你的密码。",
+        .openDocker: "打开 Docker",
         .quit: "退出",
         .never: "从未",
         .repository: "仓库",
@@ -378,6 +389,7 @@ enum AppStrings {
         .showDockIcon: "显示 Dock 图标",
         .snapshots: "个 snapshots",
         .testRepository: "测试仓库",
-        .testing: "测试中"
+        .testing: "测试中",
+        .reviewVolumes: "检查 Volumes"
     ]
 }
