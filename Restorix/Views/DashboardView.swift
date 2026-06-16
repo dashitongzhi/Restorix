@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct DashboardView: View {
@@ -179,8 +180,11 @@ struct DashboardView: View {
                         title: step.title,
                         detail: step.detail,
                         systemImage: step.systemImage,
+                        actionTitle: step.actionTitle,
                         commandToCopy: step.commandToCopy
-                    )
+                    ) {
+                        perform(step.action)
+                    }
                 }
             }
         }
@@ -194,6 +198,8 @@ struct DashboardView: View {
                 title: app.text(.dockerStartTitle),
                 detail: app.text(.dockerStartDetail),
                 systemImage: "play.circle",
+                actionTitle: app.text(.openDocker),
+                action: .openDocker,
                 commandToCopy: nil
             ))
         }
@@ -203,6 +209,8 @@ struct DashboardView: View {
                 title: app.text(.installResticTitle),
                 detail: app.text(.installResticDetail),
                 systemImage: "terminal",
+                actionTitle: app.text(.configureCLI),
+                action: .openSettings,
                 commandToCopy: "brew install restic"
             ))
         }
@@ -212,6 +220,8 @@ struct DashboardView: View {
                 title: app.text(.resticRepoAddTitle),
                 detail: app.text(.resticRepoAddDetail),
                 systemImage: "archivebox",
+                actionTitle: app.text(.addRepository),
+                action: .addRepository,
                 commandToCopy: "restorix repo add --tool restic --name \"Local Restic\" --location \"/path/to/repo\" --password-env-key RESTIC_PASSWORD"
             ))
         }
@@ -221,11 +231,47 @@ struct DashboardView: View {
                 title: app.text(.unknownReviewTitle),
                 detail: app.text(.unknownReviewDetail),
                 systemImage: "questionmark.circle",
+                actionTitle: app.text(.reviewVolumes),
+                action: .openVolumes,
                 commandToCopy: nil
             ))
         }
 
         return steps
+    }
+
+    private func perform(_ action: NextStepAction?) {
+        switch action {
+        case .addRepository:
+            app.beginAddingRepository()
+        case .openSettings:
+            WindowManager.openSettings()
+        case .openVolumes:
+            app.selectedSidebarItem = .volumes
+        case .openDocker:
+            openDockerApp()
+        case .none:
+            break
+        }
+    }
+
+    private func openDockerApp() {
+        let bundleIdentifiers = [
+            "com.docker.docker",
+            "dev.orbstack.OrbStack"
+        ]
+
+        for bundleIdentifier in bundleIdentifiers {
+            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) else {
+                continue
+            }
+
+            let configuration = NSWorkspace.OpenConfiguration()
+            NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+            return
+        }
+
+        WindowManager.openSettings()
     }
 
     private var warningsSection: some View {
@@ -250,5 +296,14 @@ private struct NextStep: Identifiable {
     let title: String
     let detail: String
     let systemImage: String
+    let actionTitle: String?
+    let action: NextStepAction?
     let commandToCopy: String?
+}
+
+private enum NextStepAction {
+    case addRepository
+    case openDocker
+    case openSettings
+    case openVolumes
 }
