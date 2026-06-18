@@ -1,4 +1,5 @@
 import SwiftUI
+import Darwin
 
 @main
 struct RestorixApp: App {
@@ -9,8 +10,19 @@ struct RestorixApp: App {
     init() {
         let appViewModel = AppViewModel()
         _appViewModel = StateObject(wrappedValue: appViewModel)
-        Task { @MainActor in
-            await appViewModel.loadConfig()
+
+        if let verificationAction = LaunchAtLoginReleaseVerifier.requestedAction() {
+            Task { @MainActor in
+                let exitCode = await LaunchAtLoginReleaseVerifier.run(
+                    action: verificationAction,
+                    appViewModel: appViewModel
+                )
+                Darwin.exit(exitCode)
+            }
+        } else {
+            Task { @MainActor in
+                await appViewModel.loadConfig()
+            }
         }
     }
 
