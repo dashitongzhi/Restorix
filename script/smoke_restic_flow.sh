@@ -7,8 +7,11 @@ APP_NAME="Restorix"
 APP_BUNDLE=""
 APP_EXECUTABLE=""
 APP_RESOURCE_CLI=""
+APP_STAGED_CLI=""
 BUILD_CLI=1
 LAUNCH_AT_LOGIN_VERIFICATION_STARTED=0
+MAX_DEPLOYMENT_MAJOR="${RESTORIX_MAX_DEPLOYMENT_MAJOR:-15}"
+APP_LAUNCH_WAIT_STEPS="${RESTORIX_APP_LAUNCH_WAIT_STEPS:-240}"
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/restorix-smoke.XXXXXX")"
 HOME_DIR="${WORK_DIR}/home"
 CONFIG_PATH="${WORK_DIR}/config.json"
@@ -22,13 +25,17 @@ log() {
 }
 
 stop_app() {
-  [[ -n "${APP_PID:-}" ]] || return 0
+  if [[ -z "${APP_PID:-}" ]]; then
+    [[ -n "${APP_EXECUTABLE}" ]] && pkill -TERM -f "${APP_EXECUTABLE}" >/dev/null 2>&1 || true
+    return 0
+  fi
 
   kill "${APP_PID}" >/dev/null 2>&1 || true
   for _ in {1..20}; do
     if ! kill -0 "${APP_PID}" >/dev/null 2>&1; then
       wait "${APP_PID}" >/dev/null 2>&1 || true
       APP_PID=""
+      [[ -n "${APP_EXECUTABLE}" ]] && pkill -TERM -f "${APP_EXECUTABLE}" >/dev/null 2>&1 || true
       return 0
     fi
     sleep 0.1
@@ -37,6 +44,7 @@ stop_app() {
   kill -KILL "${APP_PID}" >/dev/null 2>&1 || true
   wait "${APP_PID}" >/dev/null 2>&1 || true
   APP_PID=""
+  [[ -n "${APP_EXECUTABLE}" ]] && pkill -KILL -f "${APP_EXECUTABLE}" >/dev/null 2>&1 || true
 }
 
 cleanup() {
@@ -108,6 +116,11 @@ if [[ "${BUILD_CLI}" -eq 1 ]]; then
   cargo build -p restorix-cli >/dev/null
 fi
 
+if ! [[ "${APP_LAUNCH_WAIT_STEPS}" =~ ^[0-9]+$ ]] || (( APP_LAUNCH_WAIT_STEPS < 1 )); then
+  echo "RESTORIX_APP_LAUNCH_WAIT_STEPS must be a positive integer, got: ${APP_LAUNCH_WAIT_STEPS}" >&2
+  exit 2
+fi
+
 log "Checking Docker and restic prerequisites."
 command -v docker >/dev/null
 command -v restic >/dev/null
@@ -138,54 +151,108 @@ verify_app_bundle() {
     exit 1
   fi
 
+  local min_system_version
+  min_system_version="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "${APP_BUNDLE}/Contents/Info.plist")"
+  local min_system_major="${min_system_version%%.*}"
+  if ! [[ "${MAX_DEPLOYMENT_MAJOR}" =~ ^[0-9]+$ ]]; then
+    echo "RESTORIX_MAX_DEPLOYMENT_MAJOR must be an integer, got: ${MAX_DEPLOYMENT_MAJOR}" >&2
+    exit 2
+  fi
+  if [[ "${min_system_major}" =~ ^[0-9]+$ ]] && (( min_system_major > MAX_DEPLOYMENT_MAJOR )); then
+    echo "LSMinimumSystemVersion is ${min_system_version}; expected macOS ${MAX_DEPLOYMENT_MAJOR}.x or lower for release coverage." >&2
+    echo "Override RESTORIX_MAX_DEPLOYMENT_MAJOR only for an intentional narrow-platform release." >&2
+    exit 1
+  fi
+
   /usr/bin/codesign --verify --deep --strict --verbose=2 "${APP_BUNDLE}" >/dev/null
-  "${APP_RESOURCE_CLI}" --help >/dev/null
 }
 
 verify_app_launch_and_cli_staging() {
   log "Launching Restorix.app to verify bundled CLI staging."
 
   local app_home="${HOME_DIR}"
-  local staged_cli="${app_home}/Library/Application Support/${APP_NAME}/bin/restorix"
+  APP_STAGED_CLI="${app_home}/Library/Application Support/${APP_NAME}/bin/restorix"
   local app_stdout="${WORK_DIR}/app.stdout"
   local app_stderr="${WORK_DIR}/app.stderr"
+  local app_status="${WORK_DIR}/app.status"
+  local result=0
+  local open_status=0
+  local launch_attempt=0
 
   mkdir -p "${app_home}"
 
-  HOME="${app_home}" \
-  CFFIXED_USER_HOME="${app_home}" \
-  RESTORIX_CONFIG="${CONFIG_PATH}" \
-  RESTIC_PASSWORD="${PASSWORD}" \
-    "${APP_EXECUTABLE}" >"${app_stdout}" 2>"${app_stderr}" &
-  APP_PID=$!
+  for launch_attempt in 1 2; do
+    result=0
+    open_status=0
+    rm -f "${app_stdout}" "${app_stderr}" "${app_status}"
 
-  for _ in {1..40}; do
-    if [[ -x "${staged_cli}" ]]; then
+    /usr/bin/open -n -g \
+      --stdout "${app_stdout}" \
+      --stderr "${app_stderr}" \
+      --env "HOME=${app_home}" \
+      --env "CFFIXED_USER_HOME=${app_home}" \
+      --env "RESTORIX_CONFIG=${CONFIG_PATH}" \
+      --env "RESTIC_PASSWORD=${PASSWORD}" \
+      --env "RESTORIX_RELEASE_VERIFY_CLI_STAGING=1" \
+      --env "RESTORIX_RELEASE_EXPECT_STAGED_CLI=${APP_STAGED_CLI}" \
+      --env "RESTORIX_RELEASE_STATUS_FILE=${app_status}" \
+      "${APP_BUNDLE}" || open_status=$?
+
+    if [[ "${open_status}" -ne 0 ]]; then
+      echo "Restorix.app CLI staging launch request failed." >&2
+      sed -n '1,120p' "${app_stdout}" >&2 || true
+      sed -n '1,120p' "${app_stderr}" >&2 || true
+      exit "${open_status}"
+    fi
+
+    for ((i = 1; i <= APP_LAUNCH_WAIT_STEPS; i++)); do
+      if [[ -f "${app_status}" ]]; then
+        result="$(cat "${app_status}")"
+        break
+      fi
+
+      sleep 0.25
+    done
+
+    if [[ -f "${app_status}" ]]; then
       break
     fi
 
-    if ! kill -0 "${APP_PID}" >/dev/null 2>&1; then
-      echo "Restorix.app exited before staging its bundled CLI." >&2
-      sed -n '1,120p' "${app_stderr}" >&2 || true
-      exit 1
+    stop_app
+    if [[ "${launch_attempt}" -lt 2 ]]; then
+      log "Restorix.app did not write CLI staging status; retrying launch."
+      sleep 1
     fi
-
-    sleep 0.25
   done
 
-  if [[ ! -x "${staged_cli}" ]]; then
-    echo "Restorix.app did not stage ${staged_cli}." >&2
+  if [[ ! -f "${app_status}" ]]; then
+    echo "Restorix.app timed out before staging its bundled CLI." >&2
+    sed -n '1,120p' "${app_stdout}" >&2 || true
+    sed -n '1,120p' "${app_stderr}" >&2 || true
+    stop_app
+    exit 1
+  fi
+
+  if [[ "${result}" -ne 0 ]]; then
+    echo "Restorix.app CLI staging verification launch failed." >&2
+    sed -n '1,120p' "${app_stdout}" >&2 || true
+    sed -n '1,120p' "${app_stderr}" >&2 || true
+    exit "${result}"
+  fi
+
+  if [[ ! -x "${APP_STAGED_CLI}" ]]; then
+    echo "Restorix.app failed to stage its bundled CLI." >&2
+    sed -n '1,120p' "${app_stdout}" >&2 || true
     sed -n '1,120p' "${app_stderr}" >&2 || true
     exit 1
   fi
 
-  cmp -s "${APP_RESOURCE_CLI}" "${staged_cli}" || {
+  cmp -s "${APP_RESOURCE_CLI}" "${APP_STAGED_CLI}" || {
     echo "Staged CLI does not match bundled Contents/Resources/restorix." >&2
     exit 1
   }
 
-  "${staged_cli}" --help >/dev/null
-  stop_app
+  "${APP_STAGED_CLI}" --help >/dev/null
 }
 
 run_app_verifier_action() {
@@ -194,35 +261,54 @@ run_app_verifier_action() {
   local app_stderr="${WORK_DIR}/launch-at-login-${action}.stderr"
   local app_status="${WORK_DIR}/launch-at-login-${action}.status"
   local result=0
+  local open_status=0
+  local launch_attempt=0
 
-  rm -f "${app_stdout}" "${app_stderr}" "${app_status}"
+  for launch_attempt in 1 2; do
+    result=0
+    open_status=0
+    rm -f "${app_stdout}" "${app_stderr}" "${app_status}"
 
-  (
-    set +e
-    HOME="${HOME_DIR}" \
-    CFFIXED_USER_HOME="${HOME_DIR}" \
-    RESTORIX_CONFIG="${CONFIG_PATH}" \
-    RESTORIX_RELEASE_VERIFY_LAUNCH_AT_LOGIN="${action}" \
-      "${APP_EXECUTABLE}" >"${app_stdout}" 2>"${app_stderr}"
-    printf '%s\n' "$?" >"${app_status}"
-  ) &
-  APP_PID=$!
+    /usr/bin/open -n -g \
+      --stdout "${app_stdout}" \
+      --stderr "${app_stderr}" \
+      --env "HOME=${HOME_DIR}" \
+      --env "CFFIXED_USER_HOME=${HOME_DIR}" \
+      --env "RESTORIX_CONFIG=${CONFIG_PATH}" \
+      --env "RESTORIX_RELEASE_VERIFY_LAUNCH_AT_LOGIN=${action}" \
+      --env "RESTORIX_RELEASE_STATUS_FILE=${app_status}" \
+      "${APP_BUNDLE}" || open_status=$?
 
-  for _ in {1..80}; do
+    if [[ "${open_status}" -ne 0 ]]; then
+      echo "Restorix.app launch-at-login launch request failed: ${action}" >&2
+      sed -n '1,120p' "${app_stdout}" >&2 || true
+      sed -n '1,120p' "${app_stderr}" >&2 || true
+      return "${open_status}"
+    fi
+
+    for ((i = 1; i <= APP_LAUNCH_WAIT_STEPS; i++)); do
+      if [[ -f "${app_status}" ]]; then
+        result="$(cat "${app_status}")"
+        break
+      fi
+      sleep 0.25
+    done
+
     if [[ -f "${app_status}" ]]; then
-      result="$(cat "${app_status}")"
-      wait "${APP_PID}" >/dev/null 2>&1 || true
-      APP_PID=""
       break
     fi
-    sleep 0.25
+
+    stop_app
+    if [[ "${launch_attempt}" -lt 2 ]]; then
+      log "Restorix.app did not write launch-at-login status for ${action}; retrying launch."
+      sleep 1
+    fi
   done
 
-  if [[ -n "${APP_PID:-}" ]]; then
+  if [[ ! -f "${app_status}" ]]; then
     echo "Restorix.app launch-at-login verification action timed out: ${action}" >&2
     sed -n '1,120p' "${app_stdout}" >&2 || true
     sed -n '1,120p' "${app_stderr}" >&2 || true
-    pkill -TERM -P "${APP_PID}" >/dev/null 2>&1 || true
     stop_app
     return 1
   fi
@@ -276,6 +362,8 @@ verify_launch_at_login_flow() {
 
 if [[ -n "${APP_BUNDLE}" ]]; then
   verify_app_bundle
+  verify_app_launch_and_cli_staging
+  RESTORIX_BIN="${APP_STAGED_CLI}"
 elif [[ ! -x "${RESTORIX_BIN}" ]]; then
   echo "Missing restorix binary: ${RESTORIX_BIN}" >&2
   exit 1
@@ -329,7 +417,6 @@ printf '%s\n' "${REPORT}" | grep -q "${PROTECTED_VOLUME}"
 printf '%s\n' "${REPORT}" | grep -q "${UNPROTECTED_VOLUME}"
 
 if [[ -n "${APP_BUNDLE}" ]]; then
-  verify_app_launch_and_cli_staging
   verify_launch_at_login_flow
 fi
 
