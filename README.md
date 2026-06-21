@@ -2,7 +2,7 @@
 
 Restorix checks whether Docker volumes on this Mac are backed up and restorable.
 
-The first milestone is a Rust CLI:
+The first milestone includes a Rust CLI that:
 
 - scans Docker containers and volumes
 - reads restic snapshots
@@ -10,7 +10,7 @@ The first milestone is a Rust CLI:
 - reports `Protected`, `Unprotected`, `Stale`, `Unknown`, and `Error`
 - exports a Markdown health report
 
-The macOS SwiftUI menu bar app will call this CLI through `Process`.
+The macOS SwiftUI menu bar app calls this CLI through `Process`.
 
 ## CLI
 
@@ -29,4 +29,3 @@ Configuration is stored as JSON under:
 ```
 
 Set `RESTORIX_CONFIG` to use a different config path in tests or local experiments.
-

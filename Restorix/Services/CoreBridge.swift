@@ -8,6 +8,10 @@ final class CoreBridge {
         self.cliURLOverride = cliURL
     }
 
+    func resolvedCLIURLForVerification() -> URL {
+        resolveCLIURL()
+    }
+
     func scan() async throws -> ScanResult {
         let data = try await run(arguments: ["scan", "--json"])
         return try JSONDecoder.restorix.decode(ScanResult.self, from: data)
