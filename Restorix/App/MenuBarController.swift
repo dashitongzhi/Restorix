@@ -39,13 +39,13 @@ final class MenuBarController: NSObject {
         let imageName = appViewModel?.isScanning == true ? "arrow.triangle.2.circlepath" : "externaldrive.connected.to.line.below"
         let image = statusImage(preferredName: imageName)
         button.image = image
-        button.title = image == nil && statusBarTitle.isEmpty ? "R" : statusBarTitle
+        button.title = image == nil ? "R" : ""
         button.imagePosition = .imageLeft
         button.imageScaling = .scaleProportionallyDown
-        button.contentTintColor = color(for: appViewModel?.overallStatus ?? .Unknown)
+        button.contentTintColor = nil
         button.toolTip = tooltip
         button.setAccessibilityLabel(statusBarTitle)
-        statusItem.length = button.title.isEmpty ? NSStatusItem.squareLength : NSStatusItem.variableLength
+        statusItem.length = NSStatusItem.squareLength
         statusItem.isVisible = true
     }
 
@@ -182,19 +182,6 @@ final class MenuBarController: NSObject {
         item.target = self
         item.isEnabled = enabled
         return item
-    }
-
-    private func color(for status: HealthStatus) -> NSColor {
-        switch status {
-        case .Protected:
-            return .systemGreen
-        case .Stale:
-            return .systemYellow
-        case .Unprotected, .Error:
-            return .systemRed
-        case .Unknown:
-            return .systemGray
-        }
     }
 
     private func relativeDate(_ value: String) -> String {
