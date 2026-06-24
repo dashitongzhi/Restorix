@@ -84,9 +84,7 @@ struct RestorixApp: App {
                 .environmentObject(appViewModel)
                 .frame(minWidth: 980, minHeight: 640)
                 .onAppear {
-                    appDelegate.configure(appViewModel: appViewModel) {
-                        openWindow(id: "main")
-                    }
+                    configureMenuBar()
                 }
         }
         .commands {
@@ -105,6 +103,16 @@ struct RestorixApp: App {
             SettingsView()
                 .environmentObject(appViewModel)
                 .frame(width: 560, height: 500)
+                .onAppear {
+                    configureMenuBar()
+                }
+        }
+    }
+
+    @MainActor
+    private func configureMenuBar() {
+        appDelegate.configure(appViewModel: appViewModel) {
+            openWindow(id: "main")
         }
     }
 }

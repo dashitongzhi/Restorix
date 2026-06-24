@@ -37,11 +37,27 @@ final class MenuBarController: NSObject {
     private func configureButton() {
         guard let button = statusItem.button else { return }
         let imageName = appViewModel?.isScanning == true ? "arrow.triangle.2.circlepath" : "externaldrive.connected.to.line.below"
-        button.image = NSImage(systemSymbolName: imageName, accessibilityDescription: "Restorix")
-        button.title = statusBarTitle
+        let image = statusImage(preferredName: imageName)
+        button.image = image
+        button.title = image == nil && statusBarTitle.isEmpty ? "R" : statusBarTitle
         button.imagePosition = .imageLeft
+        button.imageScaling = .scaleProportionallyDown
         button.contentTintColor = color(for: appViewModel?.overallStatus ?? .Unknown)
         button.toolTip = tooltip
+        button.setAccessibilityLabel(statusBarTitle)
+        statusItem.length = button.title.isEmpty ? NSStatusItem.squareLength : NSStatusItem.variableLength
+        statusItem.isVisible = true
+    }
+
+    private func statusImage(preferredName: String) -> NSImage? {
+        for symbolName in [preferredName, "externaldrive", "shippingbox", "checkmark.shield", "circle"] {
+            if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Restorix") {
+                image.isTemplate = true
+                return image
+            }
+        }
+
+        return nil
     }
 
     private func rebuildMenu() {
@@ -70,22 +86,22 @@ final class MenuBarController: NSObject {
 
     private var statusBarTitle: String {
         guard let summary = appViewModel?.scanResult?.summary else {
-            return appViewModel?.isScanning == true ? "..." : ""
+            return appViewModel?.isScanning == true ? "Restorix ..." : "Restorix"
         }
 
         if summary.errorCount > 0 || summary.unprotectedCount > 0 {
-            return " \(summary.unprotectedCount + summary.errorCount)!"
+            return "Restorix \(summary.unprotectedCount + summary.errorCount)!"
         }
 
         if summary.staleCount > 0 {
-            return " \(summary.staleCount)"
+            return "Restorix \(summary.staleCount)"
         }
 
         if summary.unknownCount > 0 {
-            return " \(summary.unknownCount)?"
+            return "Restorix \(summary.unknownCount)?"
         }
 
-        return " OK"
+        return "Restorix OK"
     }
 
     private func statusLine(_ summary: ScanSummary?) -> String {
