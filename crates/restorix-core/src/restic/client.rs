@@ -1,7 +1,12 @@
 use crate::error::{RestorixError, Result};
 use crate::models::{BackupRepository, BackupSnapshot};
+use crate::process::run_with_timeout;
 use crate::restic::parser::parse_snapshots;
 use std::process::Command;
+use std::time::Duration;
+
+const RESTIC_CHECK_TIMEOUT: Duration = Duration::from_secs(5);
+const RESTIC_SNAPSHOTS_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[derive(Debug, Clone)]
 pub struct ResticStatus {
@@ -30,9 +35,12 @@ impl ResticClient {
             };
         }
 
-        let version = Command::new("restic")
-            .arg("version")
-            .output()
+        let mut command = Command::new("restic");
+        command.arg("version");
+
+        let check_result = run_with_timeout(command, "restic", "version", RESTIC_CHECK_TIMEOUT);
+        let message = check_result.as_ref().err().map(ToString::to_string);
+        let version = check_result
             .ok()
             .filter(|output| output.status.success())
             .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string());
@@ -40,7 +48,7 @@ impl ResticClient {
         ResticStatus {
             installed: true,
             version,
-            message: None,
+            message,
         }
     }
 
@@ -60,7 +68,12 @@ impl ResticClient {
             command.env("RESTIC_PASSWORD", value);
         }
 
-        let output = command.output()?;
+        let output = run_with_timeout(
+            command,
+            "restic",
+            "snapshots --json",
+            RESTIC_SNAPSHOTS_TIMEOUT,
+        )?;
         if !output.status.success() {
             return Err(RestorixError::CommandFailed {
                 program: "restic".to_string(),

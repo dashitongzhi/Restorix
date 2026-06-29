@@ -25,7 +25,7 @@ struct VolumeHealthRow: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
 
-            Text(item.matchedRepositoryId ?? app.text(.none))
+            Text(app.repositoryDisplayName(for: item.matchedRepositoryId))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)

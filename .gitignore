@@ -1,4 +1,6 @@
 /target
 /build
+/dist
+/*.png
 **/*.rs.bk
 .DS_Store

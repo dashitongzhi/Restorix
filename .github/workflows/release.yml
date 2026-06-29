@@ -1,0 +1,164 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  macos:
+    name: macOS package
+    runs-on: macos-26
+    timeout-minutes: 75
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Select stable Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Cache Cargo output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install release prerequisites
+        run: |
+          brew install restic
+
+      - name: Configure Developer ID signing
+        env:
+          MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64 }}
+          MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD }}
+          MACOS_DEVELOPER_ID_APPLICATION: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION }}
+          MACOS_DEVELOPMENT_TEAM: ${{ secrets.MACOS_DEVELOPMENT_TEAM }}
+          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+          MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+        run: |
+          if [[ -z "${MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64}" ]]; then
+            echo "Developer ID certificate secret is not configured; building unsigned CI artifacts."
+            {
+              echo "RESTORIX_PACKAGE_MODE=local"
+              echo "RESTORIX_NOTARIZE=0"
+              echo "RESTORIX_GATEKEEPER_VERIFY=0"
+              echo "RESTORIX_XCODEBUILD_CODE_SIGNING_ALLOWED=NO"
+            } >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          if [[ -z "${MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD}" || -z "${MACOS_DEVELOPER_ID_APPLICATION}" ]]; then
+            echo "Developer ID signing requires MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD and MACOS_DEVELOPER_ID_APPLICATION secrets." >&2
+            exit 2
+          fi
+
+          if [[ -z "${MACOS_NOTARY_APPLE_ID}" || -z "${MACOS_NOTARY_PASSWORD}" || -z "${MACOS_NOTARY_TEAM_ID:-${MACOS_DEVELOPMENT_TEAM}}" ]]; then
+            echo "Notarization requires MACOS_NOTARY_APPLE_ID, MACOS_NOTARY_PASSWORD, and MACOS_NOTARY_TEAM_ID or MACOS_DEVELOPMENT_TEAM secrets." >&2
+            exit 2
+          fi
+
+          signing_keychain="$RUNNER_TEMP/restorix-signing.keychain-db"
+          signing_keychain_password="$(uuidgen)"
+          certificate_path="$RUNNER_TEMP/restorix-developer-id-application.p12"
+
+          printf '%s' "${MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64}" | base64 --decode > "$certificate_path"
+          security create-keychain -p "$signing_keychain_password" "$signing_keychain"
+          security set-keychain-settings -lut 21600 "$signing_keychain"
+          security unlock-keychain -p "$signing_keychain_password" "$signing_keychain"
+          security import "$certificate_path" \
+            -P "$MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$signing_keychain"
+          security list-keychains -d user -s "$signing_keychain" $(security list-keychains -d user | tr -d '"')
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$signing_keychain_password" \
+            "$signing_keychain"
+
+          {
+            echo "RESTORIX_PACKAGE_MODE=developer-id"
+            echo "RESTORIX_DEVELOPER_ID_APPLICATION=$MACOS_DEVELOPER_ID_APPLICATION"
+            echo "RESTORIX_DEVELOPMENT_TEAM=${MACOS_DEVELOPMENT_TEAM:-$MACOS_NOTARY_TEAM_ID}"
+            echo "RESTORIX_NOTARY_APPLE_ID=$MACOS_NOTARY_APPLE_ID"
+            echo "RESTORIX_NOTARY_PASSWORD=$MACOS_NOTARY_PASSWORD"
+            echo "RESTORIX_NOTARY_TEAM_ID=${MACOS_NOTARY_TEAM_ID:-$MACOS_DEVELOPMENT_TEAM}"
+            echo "RESTORIX_NOTARIZE=1"
+            echo "RESTORIX_STAPLE=1"
+            echo "RESTORIX_GATEKEEPER_VERIFY=1"
+            echo "RESTORIX_XCODEBUILD_CODE_SIGNING_ALLOWED=YES"
+            echo "RESTORIX_SIGNING_KEYCHAIN=$signing_keychain"
+          } >> "$GITHUB_ENV"
+
+      - name: Start Docker
+        uses: docker/setup-docker-action@v5
+
+      - name: Show tool versions
+        run: |
+          xcodebuild -version
+          cargo --version
+          restic version
+          docker info
+          if [[ "${RESTORIX_PACKAGE_MODE:-local}" == "developer-id" ]]; then
+            xcrun notarytool --version
+          fi
+
+      - name: Validate release version stamp
+        run: bash script/stamp_release_version.sh --check
+
+      - name: Build package and run release verification
+        run: bash script/verify_release_package.sh
+
+      - name: Delete signing keychain
+        if: always()
+        run: |
+          if [[ -n "${RESTORIX_SIGNING_KEYCHAIN:-}" ]]; then
+            security delete-keychain "$RESTORIX_SIGNING_KEYCHAIN" || true
+          fi
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Restorix-macos-${{ github.ref_name }}
+          path: |
+            dist/Restorix-macos-standalone.zip
+            dist/Restorix-macos-standalone.dmg
+          if-no-files-found: error
+
+      - name: Publish GitHub release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" \
+              dist/Restorix-macos-standalone.zip \
+              dist/Restorix-macos-standalone.dmg \
+              --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              dist/Restorix-macos-standalone.zip \
+              dist/Restorix-macos-standalone.dmg \
+              --verify-tag \
+              --title "Restorix ${GITHUB_REF_NAME#v}" \
+              --notes "Automated Restorix macOS release. Cargo crates and app bundle metadata were stamped from ${GITHUB_REF_NAME}."
+          fi

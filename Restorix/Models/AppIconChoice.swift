@@ -106,7 +106,7 @@ enum AppIconChoice: String, CaseIterable, Identifiable {
             return .default
         }
 
-        return choice
+        return choice.image == nil ? .default : choice
     }
 
     func save(in defaults: UserDefaults = .standard) {

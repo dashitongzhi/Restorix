@@ -37,10 +37,27 @@ final class MenuBarController: NSObject {
     private func configureButton() {
         guard let button = statusItem.button else { return }
         let imageName = appViewModel?.isScanning == true ? "arrow.triangle.2.circlepath" : "externaldrive.connected.to.line.below"
-        button.image = NSImage(systemSymbolName: imageName, accessibilityDescription: "Restorix")
-        button.imagePosition = .imageOnly
-        button.contentTintColor = color(for: appViewModel?.overallStatus ?? .Unknown)
+        let image = statusImage(preferredName: imageName)
+        button.image = image
+        button.title = image == nil ? "R" : ""
+        button.imagePosition = .imageLeft
+        button.imageScaling = .scaleProportionallyDown
+        button.contentTintColor = nil
         button.toolTip = tooltip
+        button.setAccessibilityLabel(statusBarTitle)
+        statusItem.length = NSStatusItem.squareLength
+        statusItem.isVisible = true
+    }
+
+    private func statusImage(preferredName: String) -> NSImage? {
+        for symbolName in [preferredName, "externaldrive", "shippingbox", "checkmark.shield", "circle"] {
+            if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Restorix") {
+                image.isTemplate = true
+                return image
+            }
+        }
+
+        return nil
     }
 
     private func rebuildMenu() {
@@ -51,8 +68,10 @@ final class MenuBarController: NSObject {
         menu.addItem(disabledTitle(overallLine))
         menu.addItem(disabledTitle(statusLine(summary)))
         menu.addItem(disabledTitle(lastScanLine(summary)))
+        addRiskPreview(to: menu)
         menu.addItem(.separator())
         menu.addItem(actionItem(text(.openDashboard), #selector(openDashboard)))
+        menu.addItem(actionItem(text(.openVolumes), #selector(openVolumes), enabled: appViewModel?.scanResult != nil))
         menu.addItem(actionItem(appViewModel?.isScanning == true ? text(.scanning) : text(.scanNow), #selector(scanNow), enabled: appViewModel?.isScanning != true))
         menu.addItem(actionItem(text(.exportReport), #selector(exportReport), enabled: appViewModel?.scanResult != nil))
         menu.addItem(.separator())
@@ -65,9 +84,46 @@ final class MenuBarController: NSObject {
         statusItem.menu = menu
     }
 
+    private var statusBarTitle: String {
+        guard let summary = appViewModel?.scanResult?.summary else {
+            return appViewModel?.isScanning == true ? "Restorix ..." : "Restorix"
+        }
+
+        if summary.errorCount > 0 || summary.unprotectedCount > 0 {
+            return "Restorix \(summary.unprotectedCount + summary.errorCount)!"
+        }
+
+        if summary.staleCount > 0 {
+            return "Restorix \(summary.staleCount)"
+        }
+
+        if summary.unknownCount > 0 {
+            return "Restorix \(summary.unknownCount)?"
+        }
+
+        return "Restorix OK"
+    }
+
     private func statusLine(_ summary: ScanSummary?) -> String {
         guard let summary else { return text(.statusNotScanned) }
-        return "\(text(.statusLine)): \(summary.protectedCount) \(text(.protected)), \(summary.unprotectedCount) \(text(.unprotected)), \(summary.staleCount) \(text(.stale))"
+        return "\(text(.statusLine)): \(summary.protectedCount) \(text(.protected)), \(summary.unprotectedCount) \(text(.unprotected)), \(summary.staleCount) \(text(.stale)), \(summary.unknownCount) \(text(.unknown))"
+    }
+
+    private func addRiskPreview(to menu: NSMenu) {
+        guard let items = appViewModel?.scanResult?.volumeHealth.filter({
+            $0.status == .Unprotected || $0.status == .Stale || $0.status == .Unknown || $0.status == .Error
+        }), !items.isEmpty else {
+            return
+        }
+
+        menu.addItem(.separator())
+        for item in items.prefix(4) {
+            menu.addItem(disabledTitle("• \(item.volume.name): \(statusText(item.status))"))
+        }
+
+        if items.count > 4 {
+            menu.addItem(disabledTitle("+ \(items.count - 4) \(text(.volumes))"))
+        }
     }
 
     private func lastScanLine(_ summary: ScanSummary?) -> String {
@@ -100,6 +156,21 @@ final class MenuBarController: NSObject {
         appViewModel?.text(key) ?? AppStrings.text(key, language: .english)
     }
 
+    private func statusText(_ status: HealthStatus) -> String {
+        switch status {
+        case .Protected:
+            return text(.protected)
+        case .Unprotected:
+            return text(.unprotected)
+        case .Stale:
+            return text(.stale)
+        case .Unknown:
+            return text(.unknown)
+        case .Error:
+            return text(.error)
+        }
+    }
+
     private func disabledTitle(_ title: String) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         item.isEnabled = false
@@ -111,19 +182,6 @@ final class MenuBarController: NSObject {
         item.target = self
         item.isEnabled = enabled
         return item
-    }
-
-    private func color(for status: HealthStatus) -> NSColor {
-        switch status {
-        case .Protected:
-            return .systemGreen
-        case .Stale:
-            return .systemYellow
-        case .Unprotected, .Error:
-            return .systemRed
-        case .Unknown:
-            return .systemGray
-        }
     }
 
     private func relativeDate(_ value: String) -> String {
@@ -140,6 +198,12 @@ final class MenuBarController: NSObject {
 
     @objc private func openDashboard() {
         appViewModel?.selectedSidebarItem = .dashboard
+        openDashboardWindow()
+        WindowManager.openDashboard()
+    }
+
+    @objc private func openVolumes() {
+        appViewModel?.selectedSidebarItem = .volumes
         openDashboardWindow()
         WindowManager.openDashboard()
     }
@@ -161,8 +225,7 @@ final class MenuBarController: NSObject {
     }
 
     @objc private func openSettings() {
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        NSApp.activate(ignoringOtherApps: true)
+        WindowManager.openSettings()
     }
 
     @objc private func quit() {
