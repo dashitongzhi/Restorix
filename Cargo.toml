@@ -6,6 +6,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
+version = "1.0.0"
 edition = "2021"
 license = "MIT"
 authors = ["Restorix"]
@@ -21,4 +22,3 @@ tempfile = "3.10"
 thiserror = "1.0"
 uuid = { version = "1.8", features = ["v4", "serde"] }
 which = "6.0"
-
