@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import AppKit
 
 @MainActor
 final class AppViewModel: ObservableObject {
@@ -11,6 +12,7 @@ final class AppViewModel: ObservableObject {
     @Published var lastError: String?
     @Published var selectedSidebarItem: SidebarItem = .dashboard
     @Published var language: AppLanguage
+    @Published var selectedAppIcon: AppIconChoice
 
     private let coreBridge: CoreBridge
 
@@ -18,6 +20,7 @@ final class AppViewModel: ObservableObject {
         self.coreBridge = coreBridge ?? CoreBridge()
         let storedLanguage = UserDefaults.standard.string(forKey: "app.language") ?? AppLanguage.english.rawValue
         self.language = AppLanguage(rawValue: storedLanguage) ?? .english
+        self.selectedAppIcon = AppIconChoice.stored()
     }
 
     func text(_ key: L10nKey) -> String {
@@ -105,6 +108,25 @@ final class AppViewModel: ObservableObject {
         } catch {
             lastError = error.localizedDescription
         }
+    }
+
+    func selectAppIcon(_ icon: AppIconChoice) {
+        selectedAppIcon = icon.image == nil ? .default : icon
+        selectedAppIcon.save()
+        applySelectedAppIcon()
+    }
+
+    func applySelectedAppIcon() {
+        guard let image = selectedAppIcon.image ?? AppIconChoice.default.image else {
+            return
+        }
+
+        if selectedAppIcon.image == nil {
+            selectedAppIcon = .default
+            selectedAppIcon.save()
+        }
+
+        NSApp.applicationIconImage = image
     }
 
     var overallStatus: HealthStatus {

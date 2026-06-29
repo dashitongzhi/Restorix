@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func configure(appViewModel: AppViewModel, openDashboard: @escaping @MainActor () -> Void) {
         guard menuBarController == nil else { return }
         menuBarController = MenuBarController(appViewModel: appViewModel, openDashboard: openDashboard)
+        appViewModel.applySelectedAppIcon()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
