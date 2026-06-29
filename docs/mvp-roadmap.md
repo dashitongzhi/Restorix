@@ -7,5 +7,4 @@
 5. Markdown report export
 6. macOS SwiftUI menu bar app
 7. Dashboard, volumes, repositories, reports, and settings
-8. Bundle CLI into `Restorix.app/Contents/Resources/restorix`
-
+8. Bundle CLI payload into `Restorix.app/Contents/Resources/restorix` and stage it before execution

@@ -1,6 +1,5 @@
 # macOS Architecture
 
-The macOS app will be a SwiftUI + AppKit menu bar application.
+The macOS app is a SwiftUI + AppKit menu bar application.
 
-The app must not parse Docker or restic output directly. It should call the bundled `restorix` CLI through `Process`, decode stable JSON into Swift models, and display dashboard, volume, repository, report, and settings views.
-
+The app does not parse Docker or restic output directly. It calls the bundled `restorix` CLI through `Process`, decodes stable JSON into Swift models, and displays dashboard, volume, repository, report, and settings views.

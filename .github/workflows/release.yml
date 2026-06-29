@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  macos:
+    name: macOS package
+    runs-on: macos-26
+    timeout-minutes: 75
+    env:
+      RESTORIX_XCODEBUILD_CODE_SIGNING_ALLOWED: "NO"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Select stable Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Cache Cargo output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install release prerequisites
+        run: |
+          brew install restic
+
+      - name: Start Docker
+        uses: docker/setup-docker-action@v5
+
+      - name: Show tool versions
+        run: |
+          xcodebuild -version
+          cargo --version
+          restic version
+          docker info
+
+      - name: Build package and run release verification
+        run: bash script/verify_release_package.sh
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Restorix-macos-${{ github.ref_name }}
+          path: |
+            dist/Restorix-macos-standalone.zip
+            dist/Restorix-macos-standalone.dmg
+          if-no-files-found: error
+
+      - name: Publish GitHub release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" \
+              dist/Restorix-macos-standalone.zip \
+              dist/Restorix-macos-standalone.dmg \
+              --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              dist/Restorix-macos-standalone.zip \
+              dist/Restorix-macos-standalone.dmg \
+              --verify-tag \
+              --title "$GITHUB_REF_NAME" \
+              --notes "Automated Restorix macOS release."
+          fi

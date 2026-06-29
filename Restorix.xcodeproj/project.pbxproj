@@ -55,6 +55,7 @@
 				AD7808A32FB6ECB3000490B5 /* Sources */,
 				AD7808A42FB6ECB3000490B5 /* Frameworks */,
 				AD7808A52FB6ECB3000490B5 /* Resources */,
+				AD7808B52FB80000000490B5 /* Embed restorix CLI */,
 			);
 			buildRules = (
 			);
@@ -114,6 +115,32 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		AD7808B52FB80000000490B5 /* Embed restorix CLI */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/Cargo.toml",
+				"$(SRCROOT)/crates/restorix-core/Cargo.toml",
+				"$(SRCROOT)/crates/restorix-cli/Cargo.toml",
+			);
+			name = "Embed restorix CLI";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/restorix",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "set -euo pipefail\nexport PATH=\"/opt/homebrew/bin:/usr/local/bin:$HOME/.cargo/bin:$PATH\"\ncd \"$SRCROOT\"\n\nif ! command -v cargo >/dev/null 2>&1; then\n  echo \"error: cargo is required to build the embedded restorix CLI.\" >&2\n  exit 1\nfi\n\nif [[ \"$CONFIGURATION\" == \"Release\" ]]; then\n  cargo build --release -p restorix-cli\n  CLI_SOURCE=\"$SRCROOT/target/release/restorix\"\nelse\n  cargo build -p restorix-cli\n  CLI_SOURCE=\"$SRCROOT/target/debug/restorix\"\nfi\n\nCLI_DEST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/restorix\"\nmkdir -p \"$(dirname \"$CLI_DEST\")\"\ncp \"$CLI_SOURCE\" \"$CLI_DEST\"\nchmod +x \"$CLI_DEST\"\necho \"Embedded restorix CLI payload at $CLI_DEST\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		AD7808A32FB6ECB3000490B5 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -163,7 +190,7 @@
 				DEVELOPMENT_TEAM = 2HD5836RZ2;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -179,7 +206,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.4;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -227,7 +254,7 @@
 				DEVELOPMENT_TEAM = 2HD5836RZ2;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -237,7 +264,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.4;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;

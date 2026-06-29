@@ -50,6 +50,8 @@ enum RepoCommand {
     Add(RepoAddArgs),
     List(JsonFlag),
     Remove { repo_id: String },
+    Enable { repo_id: String },
+    Disable { repo_id: String },
     Test(RepoTestArgs),
 }
 
@@ -118,6 +120,20 @@ fn main() -> Result<()> {
             RepoCommand::Remove { repo_id } => {
                 let removed = commands::remove_repository(&config_store, &repo_id)?;
                 print_json(&serde_json::json!({ "removed": removed }))?;
+            }
+            RepoCommand::Enable { repo_id } => {
+                print_json(&commands::set_repository_enabled(
+                    &config_store,
+                    &repo_id,
+                    true,
+                )?)?;
+            }
+            RepoCommand::Disable { repo_id } => {
+                print_json(&commands::set_repository_enabled(
+                    &config_store,
+                    &repo_id,
+                    false,
+                )?)?;
             }
             RepoCommand::Test(args) => {
                 print_json(&commands::test_repository(&config_store, &args.repo_id)?)?
