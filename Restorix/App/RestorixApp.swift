@@ -90,6 +90,9 @@ struct RestorixApp: App {
         .commands {
             CommandGroup(replacing: .newItem) {}
             CommandMenu("Restorix") {
+                Button(appViewModel.text(.appIcon)) {
+                    WindowManager.openSettings()
+                }
                 Button(appViewModel.text(.scanNow)) {
                     Task {
                         await appViewModel.scanNow()
@@ -102,7 +105,7 @@ struct RestorixApp: App {
         Settings {
             SettingsView()
                 .environmentObject(appViewModel)
-                .frame(width: 560, height: 500)
+                .frame(width: 640, height: 660)
                 .onAppear {
                     configureMenuBar()
                 }

@@ -25,6 +25,14 @@ enum L10nKey: String {
     case appIconDimensional
     case appIconGlass
     case appIconNeon
+    case appIconOrbitCheck
+    case appIconVaultSeal
+    case appIconSnapshotLayers
+    case appIconTimeCapsule
+    case appIconIntegrityPrism
+    case appIconSignalArchive
+    case appIconMinimalRibbon
+    case appIconChecksumWave
     case backupHealthUnknown
     case backupNeedsAttention
     case cancel
@@ -160,6 +168,14 @@ enum AppStrings {
         .appIconDimensional: "Dimensional",
         .appIconGlass: "Glass",
         .appIconNeon: "Neon",
+        .appIconOrbitCheck: "Orbit Check",
+        .appIconVaultSeal: "Vault Seal",
+        .appIconSnapshotLayers: "Snapshots",
+        .appIconTimeCapsule: "Time Capsule",
+        .appIconIntegrityPrism: "Prism",
+        .appIconSignalArchive: "Signal",
+        .appIconMinimalRibbon: "Ribbon",
+        .appIconChecksumWave: "Checksum",
         .backupHealthUnknown: "Backup health unknown",
         .backupNeedsAttention: "Backup needs attention",
         .cancel: "Cancel",
@@ -281,6 +297,14 @@ enum AppStrings {
         .appIconDimensional: "立体",
         .appIconGlass: "玻璃",
         .appIconNeon: "霓虹",
+        .appIconOrbitCheck: "轨道校验",
+        .appIconVaultSeal: "保险库印章",
+        .appIconSnapshotLayers: "快照",
+        .appIconTimeCapsule: "时间胶囊",
+        .appIconIntegrityPrism: "棱镜",
+        .appIconSignalArchive: "信号档案",
+        .appIconMinimalRibbon: "缎带",
+        .appIconChecksumWave: "校验",
         .backupHealthUnknown: "备份健康状态未知",
         .backupNeedsAttention: "备份需要关注",
         .cancel: "取消",

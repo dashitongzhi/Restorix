@@ -22,8 +22,7 @@ final class AppViewModel: ObservableObject {
         self.coreBridge = coreBridge ?? CoreBridge()
         let storedLanguage = UserDefaults.standard.string(forKey: "app.language") ?? AppLanguage.english.rawValue
         self.language = AppLanguage(rawValue: storedLanguage) ?? .english
-        let storedAppIcon = UserDefaults.standard.string(forKey: AppIconChoice.userDefaultsKey) ?? AppIconChoice.default.rawValue
-        self.selectedAppIcon = AppIconChoice(rawValue: storedAppIcon) ?? .default
+        self.selectedAppIcon = AppIconChoice.stored()
     }
 
     func text(_ key: L10nKey) -> String {
@@ -220,15 +219,21 @@ final class AppViewModel: ObservableObject {
     }
 
     func selectAppIcon(_ icon: AppIconChoice) {
-        selectedAppIcon = icon
-        UserDefaults.standard.set(icon.rawValue, forKey: AppIconChoice.userDefaultsKey)
+        selectedAppIcon = icon.image == nil ? .default : icon
+        selectedAppIcon.save()
         applySelectedAppIcon()
     }
 
     func applySelectedAppIcon() {
-        guard let image = NSImage(named: NSImage.Name(selectedAppIcon.assetName)) else {
+        guard let image = selectedAppIcon.image ?? AppIconChoice.default.image else {
             return
         }
+
+        if selectedAppIcon.image == nil {
+            selectedAppIcon = .default
+            selectedAppIcon.save()
+        }
+
         NSApp.applicationIconImage = image
     }
 
