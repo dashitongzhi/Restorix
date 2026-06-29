@@ -36,8 +36,7 @@ final class MenuBarController: NSObject {
 
     private func configureButton() {
         guard let button = statusItem.button else { return }
-        let imageName = appViewModel?.isScanning == true ? "arrow.triangle.2.circlepath" : "externaldrive.connected.to.line.below"
-        let image = statusImage(preferredName: imageName)
+        let image = statusImage(symbolNames: statusSymbolNames)
         button.image = image
         button.title = image == nil ? "R" : ""
         button.imagePosition = .imageLeft
@@ -49,8 +48,25 @@ final class MenuBarController: NSObject {
         statusItem.isVisible = true
     }
 
-    private func statusImage(preferredName: String) -> NSImage? {
-        for symbolName in [preferredName, "externaldrive", "shippingbox", "checkmark.shield", "circle"] {
+    private var statusSymbolNames: [String] {
+        if appViewModel?.isScanning == true {
+            return ["arrow.triangle.2.circlepath"]
+        }
+
+        switch appViewModel?.overallStatus ?? .Unknown {
+        case .Protected:
+            return ["externaldrive.badge.checkmark", "checkmark.circle", "externaldrive"]
+        case .Stale:
+            return ["externaldrive.badge.exclamationmark", "exclamationmark.triangle", "externaldrive"]
+        case .Unprotected, .Error:
+            return ["externaldrive.badge.xmark", "xmark.circle", "externaldrive"]
+        case .Unknown:
+            return ["externaldrive.badge.questionmark", "questionmark.circle", "externaldrive"]
+        }
+    }
+
+    private func statusImage(symbolNames: [String]) -> NSImage? {
+        for symbolName in symbolNames + ["externaldrive", "shippingbox", "circle"] {
             if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Restorix") {
                 image.isTemplate = true
                 return image
