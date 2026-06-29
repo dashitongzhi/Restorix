@@ -1,0 +1,207 @@
+name: Codex PR Review
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to review
+        required: true
+        type: number
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: codex-review-${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Review pull request
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Review with Codex
+        uses: actions/github-script@v7
+        env:
+          CODEX_REVIEW_API_KEY: ${{ secrets.CODEX_REVIEW_API_KEY }}
+          CODEX_REVIEW_BASE_URL: ${{ secrets.CODEX_REVIEW_BASE_URL || vars.CODEX_REVIEW_BASE_URL || 'https://api.openai.com/v1' }}
+          CODEX_REVIEW_MODEL: ${{ secrets.CODEX_REVIEW_MODEL || vars.CODEX_REVIEW_MODEL || 'gpt-5' }}
+          CODEX_REVIEW_ENFORCE: ${{ vars.CODEX_REVIEW_ENFORCE || 'false' }}
+        with:
+          script: |
+            const marker = '<!-- codex-pr-review -->';
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = Number(context.payload.pull_request?.number || context.payload.inputs?.pr_number);
+
+            if (!prNumber) {
+              core.setFailed('No pull request number was provided.');
+              return;
+            }
+
+            if (!process.env.CODEX_REVIEW_API_KEY) {
+              core.setFailed('CODEX_REVIEW_API_KEY is not configured in repository secrets.');
+              return;
+            }
+
+            const { data: pull } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: prNumber,
+            });
+
+            if (pull.draft) {
+              core.info(`PR #${prNumber} is a draft; skipping review.`);
+              return;
+            }
+
+            const diffResponse = await github.request('GET /repos/{owner}/{repo}/pulls/{pull_number}', {
+              owner,
+              repo,
+              pull_number: prNumber,
+              headers: {
+                accept: 'application/vnd.github.v3.diff',
+              },
+            });
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner,
+              repo,
+              pull_number: prNumber,
+              per_page: 100,
+            });
+
+            const changedFiles = files.map((file) => ({
+              filename: file.filename,
+              status: file.status,
+              additions: file.additions,
+              deletions: file.deletions,
+              changes: file.changes,
+              patch: file.patch || '[binary or too large]',
+            }));
+
+            const maxDiffChars = 110_000;
+            const rawDiff = String(diffResponse.data || '');
+            const diff = rawDiff.length > maxDiffChars
+              ? `${rawDiff.slice(0, maxDiffChars)}\n\n[Diff truncated from ${rawDiff.length} characters.]`
+              : rawDiff;
+
+            const systemPrompt = [
+              'You are Codex acting as a senior pull request reviewer.',
+              'Review only the supplied PR metadata and diff.',
+              'Prioritize correctness, security, data loss, concurrency, platform compatibility, regressions, and missing tests.',
+              'Do not approve changes just because they look plausible.',
+              'Return concise Markdown.',
+              'Start with exactly one verdict line: Verdict: APPROVE or Verdict: REQUEST_CHANGES.',
+              'After that, list blocking findings first with file paths and line context when available.',
+              'If there are no blocking issues, say why the PR appears safe to approve and mention residual risks.',
+            ].join('\n');
+
+            const userPrompt = [
+              `Repository: ${owner}/${repo}`,
+              `Pull Request: #${prNumber} ${pull.title}`,
+              `Author: ${pull.user?.login || 'unknown'}`,
+              `Base: ${pull.base.ref} (${pull.base.sha})`,
+              `Head: ${pull.head.ref} (${pull.head.sha})`,
+              '',
+              'Changed files summary:',
+              JSON.stringify(changedFiles.map(({ filename, status, additions, deletions, changes }) => ({
+                filename,
+                status,
+                additions,
+                deletions,
+                changes,
+              })), null, 2),
+              '',
+              'Unified diff:',
+              '```diff',
+              diff,
+              '```',
+            ].join('\n');
+
+            const baseUrl = process.env.CODEX_REVIEW_BASE_URL.replace(/\/+$/, '');
+            const response = await fetch(`${baseUrl}/chat/completions`, {
+              method: 'POST',
+              headers: {
+                authorization: `Bearer ${process.env.CODEX_REVIEW_API_KEY}`,
+                'content-type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: process.env.CODEX_REVIEW_MODEL,
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: userPrompt },
+                ],
+              }),
+            });
+
+            if (!response.ok) {
+              const body = await response.text();
+              core.setFailed(`Codex review request failed: ${response.status} ${response.statusText}\n${body}`);
+              return;
+            }
+
+            const completion = await response.json();
+            const review = completion.choices?.[0]?.message?.content?.trim();
+
+            if (!review) {
+              core.setFailed('Codex review response did not include message content.');
+              return;
+            }
+
+            const verdictMatch = review.match(/^Verdict:\s*(APPROVE|REQUEST_CHANGES)\b/im);
+            const verdict = verdictMatch?.[1] || 'REQUEST_CHANGES';
+            const commentBody = [
+              marker,
+              `## Codex PR Review`,
+              '',
+              review,
+              '',
+              '---',
+              `Model: \`${process.env.CODEX_REVIEW_MODEL}\``,
+            ].join('\n');
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: prNumber,
+              per_page: 100,
+            });
+
+            const previous = comments.find((comment) => (
+              comment.user?.type === 'Bot' && comment.body?.includes(marker)
+            ));
+
+            if (previous) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: previous.id,
+                body: commentBody,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: prNumber,
+                body: commentBody,
+              });
+            }
+
+            await core.summary
+              .addHeading('Codex PR Review')
+              .addRaw(review)
+              .write();
+
+            core.info(`Codex verdict for PR #${prNumber}: ${verdict}`);
+
+            if (verdict === 'REQUEST_CHANGES' && process.env.CODEX_REVIEW_ENFORCE.toLowerCase() === 'true') {
+              core.setFailed('Codex review requested changes.');
+            }
