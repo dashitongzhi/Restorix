@@ -37,11 +37,27 @@ final class MenuBarController: NSObject {
     private func configureButton() {
         guard let button = statusItem.button else { return }
         let imageName = appViewModel?.isScanning == true ? "arrow.triangle.2.circlepath" : "externaldrive.connected.to.line.below"
-        button.image = NSImage(systemSymbolName: imageName, accessibilityDescription: "Restorix")
-        button.title = statusBarTitle
+        let image = statusImage(preferredName: imageName)
+        button.image = image
+        button.title = image == nil ? "R" : ""
         button.imagePosition = .imageLeft
-        button.contentTintColor = color(for: appViewModel?.overallStatus ?? .Unknown)
+        button.imageScaling = .scaleProportionallyDown
+        button.contentTintColor = nil
         button.toolTip = tooltip
+        button.setAccessibilityLabel(statusBarTitle)
+        statusItem.length = NSStatusItem.squareLength
+        statusItem.isVisible = true
+    }
+
+    private func statusImage(preferredName: String) -> NSImage? {
+        for symbolName in [preferredName, "externaldrive", "shippingbox", "checkmark.shield", "circle"] {
+            if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Restorix") {
+                image.isTemplate = true
+                return image
+            }
+        }
+
+        return nil
     }
 
     private func rebuildMenu() {
@@ -70,22 +86,22 @@ final class MenuBarController: NSObject {
 
     private var statusBarTitle: String {
         guard let summary = appViewModel?.scanResult?.summary else {
-            return appViewModel?.isScanning == true ? "..." : ""
+            return appViewModel?.isScanning == true ? "Restorix ..." : "Restorix"
         }
 
         if summary.errorCount > 0 || summary.unprotectedCount > 0 {
-            return " \(summary.unprotectedCount + summary.errorCount)!"
+            return "Restorix \(summary.unprotectedCount + summary.errorCount)!"
         }
 
         if summary.staleCount > 0 {
-            return " \(summary.staleCount)"
+            return "Restorix \(summary.staleCount)"
         }
 
         if summary.unknownCount > 0 {
-            return " \(summary.unknownCount)?"
+            return "Restorix \(summary.unknownCount)?"
         }
 
-        return " OK"
+        return "Restorix OK"
     }
 
     private func statusLine(_ summary: ScanSummary?) -> String {
@@ -166,19 +182,6 @@ final class MenuBarController: NSObject {
         item.target = self
         item.isEnabled = enabled
         return item
-    }
-
-    private func color(for status: HealthStatus) -> NSColor {
-        switch status {
-        case .Protected:
-            return .systemGreen
-        case .Stale:
-            return .systemYellow
-        case .Unprotected, .Error:
-            return .systemRed
-        case .Unknown:
-            return .systemGray
-        }
     }
 
     private func relativeDate(_ value: String) -> String {
