@@ -16,7 +16,8 @@ concurrency:
 jobs:
   macos:
     name: macOS package
-    runs-on: macos-26
+    # docker/setup-docker-action uses Lima/QEMU and currently fails on macOS ARM runners.
+    runs-on: macos-26-intel
     timeout-minutes: 75
 
     steps:
