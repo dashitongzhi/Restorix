@@ -194,6 +194,16 @@ dist/Restorix-macos-standalone.dmg
 
 GitHub release workflow 复用同一个验证脚本，不维护第二套并行发布路径。
 
+## 维护者自动化
+
+Codex PR review 会在活跃 pull request 上自动运行。仓库 owner、member 和 collaborator 也可以在 PR 评论里发送下面这条精确命令来手动重新触发：
+
+```text
+/codex-review
+```
+
+这个评论触发只在 pull request 上生效，普通 issue 和非信任作者关联会被忽略。
+
 ## 配置
 
 默认配置路径：

@@ -3,6 +3,8 @@ name: Codex PR Review
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
   workflow_dispatch:
     inputs:
       pr_number:
@@ -12,42 +14,93 @@ on:
 
 permissions:
   contents: read
+  issues: write
   pull-requests: write
 
 concurrency:
-  group: codex-pr-review-${{ github.repository }}-${{ github.event.pull_request.number || inputs.pr_number || github.run_id }}
+  group: codex-pr-review-${{ github.repository }}-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
   codex-review:
     runs-on: ubuntu-latest
+    if: >-
+      github.event_name != 'issue_comment' ||
+      (
+        github.event.issue.pull_request &&
+        startsWith(github.event.comment.body, '/codex-review') &&
+        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+      )
 
     steps:
+      - name: Resolve review target
+        id: review_target
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const trustedAssociations = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
+            const command = "/codex-review";
+
+            function skip(reason) {
+              core.notice(reason);
+              core.setOutput("should_run", "false");
+            }
+
+            let prNumber;
+
+            if (context.eventName === "pull_request_target") {
+              const pr = context.payload.pull_request;
+              if (pr.draft) {
+                skip(`Skipping draft pull request #${pr.number}.`);
+                return;
+              }
+              prNumber = pr.number;
+            } else if (context.eventName === "workflow_dispatch") {
+              prNumber = Number(context.payload.inputs && context.payload.inputs.pr_number);
+              if (!Number.isInteger(prNumber) || prNumber <= 0) {
+                throw new Error(`Invalid pr_number input: ${context.payload.inputs && context.payload.inputs.pr_number}`);
+              }
+            } else if (context.eventName === "issue_comment") {
+              const issue = context.payload.issue;
+              const comment = context.payload.comment;
+              if (!issue.pull_request) {
+                skip("Ignoring /codex-review outside a pull request.");
+                return;
+              }
+
+              const body = (comment.body || "").trim();
+              if (body !== command) {
+                skip(`Ignoring comment because it is not exactly ${command}.`);
+                return;
+              }
+
+              if (!trustedAssociations.has(comment.author_association)) {
+                skip(`Ignoring ${command} from ${comment.author_association || "unknown"} user ${comment.user && comment.user.login}.`);
+                return;
+              }
+
+              prNumber = issue.number;
+            } else {
+              throw new Error(`Unsupported event: ${context.eventName}`);
+            }
+
+            core.setOutput("should_run", "true");
+            core.setOutput("pr_number", String(prNumber));
+
       - name: Build review prompt from PR diff
+        if: steps.review_target.outputs.should_run == 'true'
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require("fs");
             const { owner, repo } = context.repo;
-            let pr = context.payload.pull_request;
-
-            if (!pr) {
-              const prNumber = Number(context.payload.inputs && context.payload.inputs.pr_number);
-              if (!Number.isInteger(prNumber) || prNumber <= 0) {
-                throw new Error(`Invalid pr_number input: ${context.payload.inputs && context.payload.inputs.pr_number}`);
-              }
-              const response = await github.rest.pulls.get({
-                owner,
-                repo,
-                pull_number: prNumber,
-              });
-              pr = response.data;
-            }
-
-            if (context.eventName !== "workflow_dispatch" && pr.draft) {
-              core.notice(`Skipping draft pull request #${pr.number}.`);
-              process.exit(0);
-            }
+            const prNumber = Number("${{ steps.review_target.outputs.pr_number }}");
+            const response = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: prNumber,
+            });
+            const pr = response.data;
 
             const files = await github.paginate(github.rest.pulls.listFiles, {
               owner,
@@ -129,6 +182,7 @@ jobs:
             fs.writeFileSync(".codex-pr-review-pr-number", String(pr.number));
 
       - name: Run Codex review
+        if: steps.review_target.outputs.should_run == 'true'
         id: codex
         uses: openai/codex-action@v1
         with:
@@ -141,6 +195,7 @@ jobs:
           output-file: .codex-pr-review.md
 
       - name: Publish review comment
+        if: steps.review_target.outputs.should_run == 'true'
         uses: actions/github-script@v7
         with:
           script: |
