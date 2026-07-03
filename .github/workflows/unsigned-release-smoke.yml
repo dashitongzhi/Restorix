@@ -1,0 +1,93 @@
+name: Unsigned Release Smoke
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unsigned-release-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    name: unsigned macOS package smoke
+    # Keep this on the same Intel runner family as release.yml because the Docker smoke
+    # path currently relies on docker/setup-docker-action support there.
+    runs-on: macos-26-intel
+    timeout-minutes: 75
+    env:
+      RESTORIX_PACKAGE_MODE: local
+      RESTORIX_NOTARIZE: "0"
+      RESTORIX_STAPLE: "0"
+      RESTORIX_GATEKEEPER_VERIFY: "0"
+      RESTORIX_XCODEBUILD_CODE_SIGNING_ALLOWED: "NO"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Select stable Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Cache Cargo output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install release prerequisites
+        run: |
+          brew install restic
+
+      - name: Start Docker
+        uses: docker/setup-docker-action@v5
+
+      - name: Show tool versions
+        run: |
+          xcodebuild -version
+          cargo --version
+          restic version
+          docker info
+
+      - name: Validate release version stamp
+        run: bash script/stamp_release_version.sh --check
+
+      - name: Build package and run release verification
+        run: bash script/verify_release_package.sh
+
+      - name: Inspect unsigned release outputs
+        run: |
+          test -d dist/Restorix.app
+          test -f dist/Restorix-macos-standalone.zip
+          test -f dist/Restorix-macos-standalone.dmg
+
+          codesign -dv --verbose=4 dist/Restorix.app 2>&1 | tee "$RUNNER_TEMP/restorix-codesign.txt"
+          if grep -q '^Authority=Developer ID Application' "$RUNNER_TEMP/restorix-codesign.txt"; then
+            echo "Unsigned smoke unexpectedly produced a Developer ID signed app." >&2
+            exit 1
+          fi
+
+      - name: Upload unsigned smoke artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Restorix-unsigned-smoke-${{ github.sha }}
+          path: |
+            dist/Restorix-macos-standalone.zip
+            dist/Restorix-macos-standalone.dmg
+          if-no-files-found: error
+          retention-days: 7
