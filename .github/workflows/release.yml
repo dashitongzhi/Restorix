@@ -2,6 +2,12 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      unsigned_ci_artifacts:
+        description: "Allow unsigned local-mode artifacts for CI smoke only; never publish them as release assets."
+        required: false
+        type: boolean
+        default: false
   push:
     tags:
       - "v*"
@@ -44,8 +50,9 @@ jobs:
         run: |
           brew install restic
 
-      - name: Configure Developer ID signing
+      - name: Resolve release signing policy
         env:
+          RESTORIX_ALLOW_UNSIGNED_CI_ARTIFACTS: ${{ github.event_name == 'workflow_dispatch' && inputs.unsigned_ci_artifacts }}
           MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64 }}
           MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD }}
           MACOS_DEVELOPER_ID_APPLICATION: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION }}
@@ -53,26 +60,16 @@ jobs:
           MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
           MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
           MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+        run: bash script/resolve_release_signing_policy.sh
+
+      - name: Import Developer ID certificate
+        env:
+          MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64 }}
+          MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD }}
         run: |
-          if [[ -z "${MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64}" ]]; then
-            echo "Developer ID certificate secret is not configured; building unsigned CI artifacts."
-            {
-              echo "RESTORIX_PACKAGE_MODE=local"
-              echo "RESTORIX_NOTARIZE=0"
-              echo "RESTORIX_GATEKEEPER_VERIFY=0"
-              echo "RESTORIX_XCODEBUILD_CODE_SIGNING_ALLOWED=NO"
-            } >> "$GITHUB_ENV"
+          if [[ "${RESTORIX_PACKAGE_MODE:-local}" != "developer-id" ]]; then
+            echo "Developer ID certificate import skipped for explicit unsigned CI artifacts."
             exit 0
-          fi
-
-          if [[ -z "${MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD}" || -z "${MACOS_DEVELOPER_ID_APPLICATION}" ]]; then
-            echo "Developer ID signing requires MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD and MACOS_DEVELOPER_ID_APPLICATION secrets." >&2
-            exit 2
-          fi
-
-          if [[ -z "${MACOS_NOTARY_APPLE_ID}" || -z "${MACOS_NOTARY_PASSWORD}" || -z "${MACOS_NOTARY_TEAM_ID:-${MACOS_DEVELOPMENT_TEAM}}" ]]; then
-            echo "Notarization requires MACOS_NOTARY_APPLE_ID, MACOS_NOTARY_PASSWORD, and MACOS_NOTARY_TEAM_ID or MACOS_DEVELOPMENT_TEAM secrets." >&2
-            exit 2
           fi
 
           signing_keychain="$RUNNER_TEMP/restorix-signing.keychain-db"
@@ -89,26 +86,18 @@ jobs:
             -t cert \
             -f pkcs12 \
             -k "$signing_keychain"
-          security list-keychains -d user -s "$signing_keychain" $(security list-keychains -d user | tr -d '"')
+          existing_keychains=()
+          while IFS= read -r keychain; do
+            [[ -z "$keychain" ]] || existing_keychains+=("$keychain")
+          done < <(security list-keychains -d user | tr -d '"')
+          security list-keychains -d user -s "$signing_keychain" "${existing_keychains[@]}"
           security set-key-partition-list \
             -S apple-tool:,apple:,codesign: \
             -s \
             -k "$signing_keychain_password" \
             "$signing_keychain"
 
-          {
-            echo "RESTORIX_PACKAGE_MODE=developer-id"
-            echo "RESTORIX_DEVELOPER_ID_APPLICATION=$MACOS_DEVELOPER_ID_APPLICATION"
-            echo "RESTORIX_DEVELOPMENT_TEAM=${MACOS_DEVELOPMENT_TEAM:-$MACOS_NOTARY_TEAM_ID}"
-            echo "RESTORIX_NOTARY_APPLE_ID=$MACOS_NOTARY_APPLE_ID"
-            echo "RESTORIX_NOTARY_PASSWORD=$MACOS_NOTARY_PASSWORD"
-            echo "RESTORIX_NOTARY_TEAM_ID=${MACOS_NOTARY_TEAM_ID:-$MACOS_DEVELOPMENT_TEAM}"
-            echo "RESTORIX_NOTARIZE=1"
-            echo "RESTORIX_STAPLE=1"
-            echo "RESTORIX_GATEKEEPER_VERIFY=1"
-            echo "RESTORIX_XCODEBUILD_CODE_SIGNING_ALLOWED=YES"
-            echo "RESTORIX_SIGNING_KEYCHAIN=$signing_keychain"
-          } >> "$GITHUB_ENV"
+          echo "RESTORIX_SIGNING_KEYCHAIN=$signing_keychain" >> "$GITHUB_ENV"
 
       - name: Start Docker
         uses: docker/setup-docker-action@v5
@@ -146,10 +135,15 @@ jobs:
           if-no-files-found: error
 
       - name: Publish GitHub release assets
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [[ "${RESTORIX_PACKAGE_MODE:-}" != "developer-id" ]]; then
+            echo "Refusing to publish ${GITHUB_REF_NAME}: public v* release assets must be Developer ID signed and notarized." >&2
+            exit 2
+          fi
+
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" \
               dist/Restorix-macos-standalone.zip \
