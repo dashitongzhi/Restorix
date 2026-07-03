@@ -192,7 +192,18 @@ dist/Restorix-macos-standalone.zip
 dist/Restorix-macos-standalone.dmg
 ```
 
-The GitHub release workflow reuses the same verification script instead of maintaining a parallel release path.
+The GitHub release workflow reuses the same verification script instead of maintaining a parallel release path. Public `v*` tag releases are allowed to publish GitHub release assets only when Developer ID signing and notarization are configured. The workflow fails before packaging unsigned public release artifacts if any of these secrets are missing:
+
+```text
+MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64
+MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD
+MACOS_DEVELOPER_ID_APPLICATION
+MACOS_NOTARY_APPLE_ID
+MACOS_NOTARY_PASSWORD
+MACOS_NOTARY_TEAM_ID or MACOS_DEVELOPMENT_TEAM
+```
+
+Unsigned artifacts are reserved for explicit maintainer smoke runs: start `workflow_dispatch` with `unsigned_ci_artifacts=true`. That path uses local signing, disables notarization and Gatekeeper release checks, uploads only workflow artifacts, and never publishes GitHub release assets.
 
 ## Maintainer Automation
 

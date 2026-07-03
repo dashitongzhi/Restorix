@@ -192,7 +192,18 @@ dist/Restorix-macos-standalone.zip
 dist/Restorix-macos-standalone.dmg
 ```
 
-GitHub release workflow 复用同一个验证脚本，不维护第二套并行发布路径。
+GitHub release workflow 复用同一个验证脚本，不维护第二套并行发布路径。公开的 `v*` tag release 只有在 Developer ID 签名和 notarization 都配置完成时才会发布 GitHub release assets。如果缺少下面任一 secret，workflow 会在打包 unsigned 公开发布产物之前失败：
+
+```text
+MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64
+MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD
+MACOS_DEVELOPER_ID_APPLICATION
+MACOS_NOTARY_APPLE_ID
+MACOS_NOTARY_PASSWORD
+MACOS_NOTARY_TEAM_ID or MACOS_DEVELOPMENT_TEAM
+```
+
+Unsigned artifacts 只保留给 maintainer 显式触发的 smoke run：使用 `workflow_dispatch` 并设置 `unsigned_ci_artifacts=true`。这条路径使用 local signing，关闭 notarization 和 Gatekeeper release checks，只上传 workflow artifacts，绝不会发布 GitHub release assets。
 
 ## 维护者自动化
 
