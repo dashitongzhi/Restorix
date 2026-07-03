@@ -47,13 +47,10 @@ jobs:
             }
 
             let prNumber;
+            let pr;
 
             if (context.eventName === "pull_request_target") {
-              const pr = context.payload.pull_request;
-              if (pr.draft) {
-                skip(`Skipping draft pull request #${pr.number}.`);
-                return;
-              }
+              pr = context.payload.pull_request;
               prNumber = pr.number;
             } else if (context.eventName === "workflow_dispatch") {
               prNumber = Number(context.payload.inputs && context.payload.inputs.pr_number);
@@ -82,6 +79,22 @@ jobs:
               prNumber = issue.number;
             } else {
               throw new Error(`Unsupported event: ${context.eventName}`);
+            }
+
+            if (context.eventName !== "workflow_dispatch") {
+              if (!pr) {
+                const response = await github.rest.pulls.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: prNumber,
+                });
+                pr = response.data;
+              }
+
+              if (pr.draft) {
+                skip(`Skipping draft pull request #${pr.number}.`);
+                return;
+              }
             }
 
             core.setOutput("should_run", "true");

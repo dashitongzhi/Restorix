@@ -196,13 +196,13 @@ The GitHub release workflow reuses the same verification script instead of maint
 
 ## Maintainer Automation
 
-Codex PR review runs automatically on active pull requests. Repository owners, members, and collaborators can also retrigger it from a pull request comment by posting exactly:
+Codex PR review runs automatically on non-draft pull requests. Repository owners, members, and collaborators can also retrigger it from a non-draft pull request comment by posting exactly:
 
 ```text
 /codex-review
 ```
 
-The comment trigger is ignored outside pull requests and for untrusted author associations.
+The comment trigger is ignored outside pull requests, on draft pull requests, and for untrusted author associations.
 
 ## Configuration
 
