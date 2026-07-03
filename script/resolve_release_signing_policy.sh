@@ -44,6 +44,12 @@ configure_unsigned_ci_artifacts() {
   write_env RESTORIX_XCODEBUILD_CODE_SIGNING_ALLOWED NO
 }
 
+if [[ "$is_public_v_release" != true ]] && truthy "$allow_unsigned"; then
+  echo "Building unsigned CI artifacts for an explicit non-release smoke run."
+  configure_unsigned_ci_artifacts
+  exit 0
+fi
+
 if [[ -z "$cert_base64" ]]; then
   if [[ "$is_public_v_release" == true ]]; then
     echo "Public v* releases require MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64; refusing to build unsigned release artifacts." >&2
