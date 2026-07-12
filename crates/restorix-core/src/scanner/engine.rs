@@ -42,8 +42,11 @@ pub fn scan(config_store: &ConfigStore) -> ScanResult {
     };
 
     let volumes = if docker_status.running {
-        match docker.scan_volumes() {
-            Ok(volumes) => volumes,
+        match docker.scan_volumes_with_errors() {
+            Ok(scan) => {
+                errors.extend(scan.errors);
+                scan.volumes
+            }
             Err(error) => {
                 errors.push(error.to_string());
                 Vec::new()

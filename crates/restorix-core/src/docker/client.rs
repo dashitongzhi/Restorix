@@ -21,6 +21,12 @@ pub struct DockerStatus {
 #[derive(Debug, Default, Clone)]
 pub struct DockerClient;
 
+#[derive(Debug, Default)]
+pub struct VolumeScan {
+    pub volumes: Vec<DockerVolume>,
+    pub errors: Vec<String>,
+}
+
 impl DockerClient {
     pub fn new() -> Self {
         Self
@@ -103,18 +109,39 @@ impl DockerClient {
     }
 
     pub fn scan_volumes(&self) -> Result<Vec<DockerVolume>> {
+        let scan = self.scan_volumes_with_errors()?;
+        Ok(scan.volumes)
+    }
+
+    pub fn scan_volumes_with_errors(&self) -> Result<VolumeScan> {
         ensure_docker_running(self)?;
         let output = run_docker(&["volume", "ls", "--format", "{{json .}}"])?;
         let rows = parse_volume_rows(&output)?;
         let mut volumes = Vec::with_capacity(rows.len());
+        let mut errors = Vec::new();
 
         for row in rows {
-            let inspect_json = run_docker(&["volume", "inspect", &row.name])?;
-            volumes.push(parse_volume_inspect(&inspect_json)?);
+            match run_docker(&["volume", "inspect", &row.name])
+                .and_then(|inspect_json| parse_volume_inspect(&inspect_json))
+            {
+                Ok(volume) => volumes.push(volume),
+                Err(error) => {
+                    errors.push(format!(
+                        "Docker volume {} could not be inspected: {error}",
+                        row.name
+                    ));
+                    volumes.push(DockerVolume {
+                        name: row.name,
+                        driver: "unknown".to_string(),
+                        mountpoint: String::new(),
+                        labels: Vec::new(),
+                    });
+                }
+            }
         }
 
         volumes.sort_by(|a, b| a.name.cmp(&b.name));
-        Ok(volumes)
+        Ok(VolumeScan { volumes, errors })
     }
 }
 
