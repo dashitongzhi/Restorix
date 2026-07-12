@@ -8,6 +8,7 @@ struct AddRepositoryView: View {
     @State private var name = ""
     @State private var location = ""
     @State private var passwordEnvKey = "RESTIC_PASSWORD"
+    @State private var password = ""
     @State private var expectedHostname = ""
     @State private var errorMessage: String?
     @State private var isSaving = false
@@ -31,6 +32,7 @@ struct AddRepositoryView: View {
                 }
                 TextField(app.text(.passwordEnv), text: $passwordEnvKey)
                     .focused($focusedField, equals: .passwordEnvKey)
+                SecureField(app.text(.password), text: $password)
                 TextField(app.text(.snapshotHostname), text: $expectedHostname)
                     .focused($focusedField, equals: .expectedHostname)
                 Toggle(app.text(.enabled), isOn: $enabled)
@@ -101,6 +103,7 @@ struct AddRepositoryView: View {
                 name: trimmedName,
                 location: trimmedLocation,
                 passwordEnvKey: trimmedPasswordEnvKey,
+                password: password,
                 expectedHostname: trimmedExpectedHostname,
                 enabled: enabled
             )

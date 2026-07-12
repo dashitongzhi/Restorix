@@ -92,6 +92,7 @@ enum L10nKey: String {
     case openVolumes
     case productSubtitle
     case passwordEnv
+    case password
     case protected
     case reason
     case repositories
@@ -237,6 +238,7 @@ enum AppStrings {
         .openVolumes: "Open Volumes",
         .productSubtitle: "Restorix checks whether Docker volumes are actually restorable.",
         .passwordEnv: "Password env",
+        .password: "Repository password (stored in Keychain)",
         .protected: "Protected",
         .reason: "Reason",
         .repositories: "Repositories",
@@ -368,6 +370,7 @@ enum AppStrings {
         .openVolumes: "打开 Volumes",
         .productSubtitle: "Restorix 会检查 Docker volumes 是否真的可恢复。",
         .passwordEnv: "密码环境变量",
+        .password: "仓库密码（存储在钥匙串）",
         .protected: "已保护",
         .reason: "原因",
         .repositories: "仓库",

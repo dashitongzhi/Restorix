@@ -15,7 +15,8 @@ final class CoreBridge {
     }
 
     func scan() async throws -> ScanResult {
-        let data = try await run(arguments: ["scan", "--json"], timeout: scanTimeoutSeconds)
+        let credentials = try await credentials(for: listRepositories())
+        let data = try await run(arguments: ["scan", "--json"], environment: credentials, timeout: scanTimeoutSeconds)
         return try JSONDecoder.restorix.decode(ScanResult.self, from: data)
     }
 
@@ -37,11 +38,13 @@ final class CoreBridge {
     }
 
     func testRepository(id: String) async throws -> [BackupSnapshot] {
-        let data = try await run(arguments: ["repo", "test", id, "--json"])
+        let repositories = try await listRepositories()
+        let credentials = try await credentials(for: repositories.filter { $0.id == id })
+        let data = try await run(arguments: ["repo", "test", id, "--json"], environment: credentials)
         return try JSONDecoder.restorix.decode([BackupSnapshot].self, from: data)
     }
 
-    func addRepository(name: String, location: String, passwordEnvKey: String?, expectedHostname: String, enabled: Bool) async throws -> BackupRepository {
+    func addRepository(name: String, location: String, passwordEnvKey: String?, password: String?, expectedHostname: String, enabled: Bool) async throws -> BackupRepository {
         var arguments = [
             "repo", "add",
             "--tool", "restic",
@@ -56,7 +59,16 @@ final class CoreBridge {
         }
 
         let data = try await run(arguments: arguments)
-        return try JSONDecoder.restorix.decode(BackupRepository.self, from: data)
+        let repository = try JSONDecoder.restorix.decode(BackupRepository.self, from: data)
+        if let password, let passwordEnvKey, !password.isEmpty {
+            do {
+                try KeychainCredentialStore.save(password, for: passwordEnvKey)
+            } catch {
+                _ = try? await removeRepository(id: repository.id)
+                throw error
+            }
+        }
+        return repository
     }
 
     func exportMarkdownReport(language: AppLanguage = .english) async throws -> String {
@@ -77,7 +89,7 @@ final class CoreBridge {
         return try JSONDecoder.restorix.decode(AppSettings.self, from: data)
     }
 
-    private func run(arguments: [String], timeout: TimeInterval? = nil) async throws -> Data {
+    private func run(arguments: [String], environment: [String: String] = [:], timeout: TimeInterval? = nil) async throws -> Data {
         try await withCheckedThrowingContinuation { continuation in
             let process = Process()
             let stdout = Pipe()
@@ -91,7 +103,7 @@ final class CoreBridge {
             process.standardError = stderr
             process.environment = ProcessInfo.processInfo.environment.merging([
                 "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-            ]) { _, controlled in controlled }
+            ]) { _, controlled in controlled }.merging(environment) { _, credential in credential }
 
             let state = ProcessRunState()
             let output = PipeOutputCollector(pipe: stdout)
@@ -152,6 +164,17 @@ final class CoreBridge {
         }
 
         return Self.defaultCLIURL()
+    }
+
+    private func credentials(for repositories: [BackupRepository]) throws -> [String: String] {
+        var credentials: [String: String] = [:]
+        for key in Set(repositories.compactMap(\.passwordEnvKey)) {
+            guard let password = try KeychainCredentialStore.password(for: key) else {
+                throw CoreBridgeError.missingKeychainCredential(key)
+            }
+            credentials[key] = password
+        }
+        return credentials
     }
 
     private static func defaultCLIURL() -> URL {
@@ -281,6 +304,7 @@ enum CoreBridgeError: LocalizedError {
     case commandFailed(String)
     case commandTimedOut(String, Int)
     case launchFailed(String, String)
+    case missingKeychainCredential(String)
 
     var errorDescription: String? {
         switch self {
@@ -290,6 +314,8 @@ enum CoreBridgeError: LocalizedError {
             return "Restorix command timed out after \(seconds)s: \(command)"
         case .launchFailed(let path, let message):
             return "Restorix could not launch the CLI at \(path). \(message)"
+        case .missingKeychainCredential(let key):
+            return "No Keychain credential is available for \(key). Add or update the repository password in Restorix."
         }
     }
 }

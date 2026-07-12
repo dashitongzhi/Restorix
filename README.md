@@ -226,7 +226,7 @@ For tests and isolated experiments, set:
 export RESTORIX_CONFIG="/tmp/restorix-config.json"
 ```
 
-Repository passwords are referenced by environment variable name, for example `RESTIC_PASSWORD`, instead of being stored directly in the Restorix config file. The macOS app cannot inherit your interactive shell environment reliably, so do not rely on an app scan until a credential is available to its process.
+Repository passwords are referenced by environment variable name, for example `RESTIC_PASSWORD`, instead of being stored directly in the Restorix config file. The macOS app stores a password entered while adding a repository in the user's Keychain and injects it only into the corresponding CLI subprocess; CLI automation can continue to provide the named environment variable itself.
 
 ## Repository Layout
 
