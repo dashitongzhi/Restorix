@@ -59,6 +59,58 @@ fn recent_reliable_snapshot_marks_volume_protected() {
 }
 
 #[test]
+fn snapshot_from_another_host_never_marks_volume_protected() {
+    let now = Utc.with_ymd_and_hms(2026, 5, 15, 10, 0, 0).unwrap();
+    let mut snapshot = snapshot(
+        "snap-other-host",
+        "2026-05-15T08:00:00Z",
+        "/var/lib/docker/volumes/postgres_data/_data",
+    );
+    snapshot.hostname = Some("other-host".to_string());
+
+    let health = calculate_volume_health(
+        &[volume(
+            "postgres_data",
+            "/var/lib/docker/volumes/postgres_data/_data",
+        )],
+        &[repo()],
+        &[snapshot],
+        72,
+        false,
+        now,
+    );
+
+    assert_eq!(health[0].status, HealthStatus::Unprotected);
+    assert!(health[0].matched_snapshot_id.is_none());
+}
+
+#[test]
+fn repository_without_expected_hostname_is_unknown() {
+    let now = Utc.with_ymd_and_hms(2026, 5, 15, 10, 0, 0).unwrap();
+    let mut repository = repo();
+    repository.expected_hostname = None;
+
+    let health = calculate_volume_health(
+        &[volume(
+            "postgres_data",
+            "/var/lib/docker/volumes/postgres_data/_data",
+        )],
+        &[repository],
+        &[snapshot(
+            "snap-1",
+            "2026-05-15T08:00:00Z",
+            "/var/lib/docker/volumes/postgres_data/_data",
+        )],
+        72,
+        false,
+        now,
+    );
+
+    assert_eq!(health[0].status, HealthStatus::Unknown);
+    assert!(health[0].reason.contains("hostname"));
+}
+
+#[test]
 fn old_reliable_snapshot_marks_volume_stale() {
     let now = Utc.with_ymd_and_hms(2026, 5, 15, 10, 0, 0).unwrap();
     let health = calculate_volume_health(
@@ -224,6 +276,7 @@ fn repo() -> BackupRepository {
         tool: BackupTool::Restic,
         location: "/tmp/restic".to_string(),
         password_env_key: Some("RESTIC_PASSWORD".to_string()),
+        expected_hostname: Some("homelab".to_string()),
         enabled: true,
         created_at: "2026-05-15T00:00:00Z".to_string(),
         updated_at: "2026-05-15T00:00:00Z".to_string(),

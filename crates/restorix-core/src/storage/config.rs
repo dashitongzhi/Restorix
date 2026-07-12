@@ -111,6 +111,7 @@ impl ConfigStore {
         tool: BackupTool,
         location: String,
         password_env_key: Option<String>,
+        expected_hostname: Option<String>,
         enabled: bool,
     ) -> Result<BackupRepository> {
         self.update(|config| {
@@ -121,6 +122,7 @@ impl ConfigStore {
                 tool,
                 location,
                 password_env_key: password_env_key.filter(|value| !value.trim().is_empty()),
+                expected_hostname: expected_hostname.filter(|value| !value.trim().is_empty()),
                 enabled,
                 created_at: now.clone(),
                 updated_at: now,

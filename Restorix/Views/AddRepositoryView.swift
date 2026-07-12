@@ -8,6 +8,7 @@ struct AddRepositoryView: View {
     @State private var name = ""
     @State private var location = ""
     @State private var passwordEnvKey = "RESTIC_PASSWORD"
+    @State private var expectedHostname = ""
     @State private var enabled = true
     @FocusState private var focusedField: Field?
 
@@ -28,6 +29,8 @@ struct AddRepositoryView: View {
                 }
                 TextField(app.text(.passwordEnv), text: $passwordEnvKey)
                     .focused($focusedField, equals: .passwordEnvKey)
+                TextField(app.text(.snapshotHostname), text: $expectedHostname)
+                    .focused($focusedField, equals: .expectedHostname)
                 Toggle(app.text(.enabled), isOn: $enabled)
             }
             .formStyle(.grouped)
@@ -61,7 +64,7 @@ struct AddRepositoryView: View {
     }
 
     private var canAdd: Bool {
-        !trimmedName.isEmpty && !trimmedLocation.isEmpty
+        !trimmedName.isEmpty && !trimmedLocation.isEmpty && !trimmedExpectedHostname.isEmpty
     }
 
     private var trimmedName: String {
@@ -77,12 +80,17 @@ struct AddRepositoryView: View {
         return value.isEmpty ? nil : value
     }
 
+    private var trimmedExpectedHostname: String {
+        expectedHostname.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private func addRepository() {
         Task {
             await app.addRepository(
                 name: trimmedName,
                 location: trimmedLocation,
                 passwordEnvKey: trimmedPasswordEnvKey,
+                expectedHostname: trimmedExpectedHostname,
                 enabled: enabled
             )
             dismiss()
@@ -109,4 +117,5 @@ private enum Field {
     case name
     case location
     case passwordEnvKey
+    case expectedHostname
 }

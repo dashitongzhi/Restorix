@@ -39,12 +39,13 @@ final class CoreBridge {
         return try JSONDecoder.restorix.decode([BackupSnapshot].self, from: data)
     }
 
-    func addRepository(name: String, location: String, passwordEnvKey: String?, enabled: Bool) async throws -> BackupRepository {
+    func addRepository(name: String, location: String, passwordEnvKey: String?, expectedHostname: String, enabled: Bool) async throws -> BackupRepository {
         var arguments = [
             "repo", "add",
             "--tool", "restic",
             "--name", name,
             "--location", location,
+            "--expected-hostname", expectedHostname,
             "--enabled", enabled ? "true" : "false"
         ]
 

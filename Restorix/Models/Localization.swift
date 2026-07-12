@@ -104,6 +104,7 @@ enum L10nKey: String {
     case resticRepoAddTitle
     case restoreCommand
     case safeRestoreCommand
+    case snapshotHostname
     case save
     case saveSettings
     case scan
@@ -247,6 +248,7 @@ enum AppStrings {
         .resticRepoAddTitle: "Add a restic repository",
         .restoreCommand: "Restore command",
         .safeRestoreCommand: "Safe restore command",
+        .snapshotHostname: "Snapshot hostname",
         .save: "Save",
         .saveSettings: "Save Settings",
         .scan: "Scan",
@@ -376,6 +378,7 @@ enum AppStrings {
         .resticRepoAddTitle: "添加 restic 仓库",
         .restoreCommand: "恢复命令",
         .safeRestoreCommand: "安全恢复命令",
+        .snapshotHostname: "快照主机名",
         .save: "保存",
         .saveSettings: "保存设置",
         .scan: "扫描",

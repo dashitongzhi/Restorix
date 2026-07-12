@@ -58,6 +58,8 @@ pub struct BackupRepository {
     pub tool: BackupTool,
     pub location: String,
     pub password_env_key: Option<String>,
+    #[serde(default)]
+    pub expected_hostname: Option<String>,
     pub enabled: bool,
     pub created_at: String,
     pub updated_at: String,

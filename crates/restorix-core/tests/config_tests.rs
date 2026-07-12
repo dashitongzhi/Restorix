@@ -13,6 +13,7 @@ fn stores_repository_without_password_value() {
             BackupTool::Restic,
             "/tmp/restic".to_string(),
             Some("RESTIC_PASSWORD".to_string()),
+            Some("homelab".to_string()),
             true,
         )
         .unwrap();
@@ -40,6 +41,7 @@ fn updates_repository_enabled_state() {
             BackupTool::Restic,
             "/tmp/restic".to_string(),
             None,
+            Some("homelab".to_string()),
             true,
         )
         .unwrap();
@@ -141,6 +143,7 @@ fn old_config_missing_new_fields_preserves_existing_repositories() {
     assert!(!config.launch_at_login);
     assert_eq!(config.repositories.len(), 1);
     assert_eq!(config.repositories[0].id, "repo-1");
+    assert!(config.repositories[0].expected_hostname.is_none());
 }
 
 #[test]

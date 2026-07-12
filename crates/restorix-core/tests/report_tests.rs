@@ -70,6 +70,7 @@ fn scan_result() -> ScanResult {
             tool: BackupTool::Restic,
             location: "/tmp/restic".to_string(),
             password_env_key: None,
+            expected_hostname: Some("homelab".to_string()),
             enabled: true,
             created_at: "2026-05-15T00:00:00Z".to_string(),
             updated_at: "2026-05-15T00:00:00Z".to_string(),

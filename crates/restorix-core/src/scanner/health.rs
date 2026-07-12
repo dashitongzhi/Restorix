@@ -46,7 +46,22 @@ fn calculate_one_volume_health(
         return unknown(volume, "No enabled backup repositories are configured.");
     }
 
-    let Some(snapshot_match) = best_snapshot_match(volume, snapshots) else {
+    let trusted_snapshots = snapshots
+        .iter()
+        .filter(|snapshot| snapshot_has_expected_hostname(snapshot, repositories))
+        .cloned()
+        .collect::<Vec<_>>();
+
+    let Some(snapshot_match) = best_snapshot_match(volume, &trusted_snapshots) else {
+        if repositories
+            .iter()
+            .any(|repository| repository.enabled && missing_expected_hostname(repository))
+        {
+            return unknown(
+                volume,
+                "An enabled repository has no expected snapshot hostname, so Restorix cannot prove host-specific backup coverage.",
+            );
+        }
         return VolumeHealth {
             volume: volume.clone(),
             status: HealthStatus::Unprotected,
@@ -130,6 +145,24 @@ fn calculate_one_volume_health(
                 .to_string(),
         },
     }
+}
+
+fn snapshot_has_expected_hostname(
+    snapshot: &BackupSnapshot,
+    repositories: &[BackupRepository],
+) -> bool {
+    repositories
+        .iter()
+        .find(|repository| repository.id == snapshot.repository_id && repository.enabled)
+        .and_then(|repository| repository.expected_hostname.as_deref())
+        .is_some_and(|expected| snapshot.hostname.as_deref() == Some(expected))
+}
+
+fn missing_expected_hostname(repository: &BackupRepository) -> bool {
+    repository
+        .expected_hostname
+        .as_deref()
+        .is_none_or(|hostname| hostname.trim().is_empty())
 }
 
 fn unknown(volume: &DockerVolume, reason: &str) -> VolumeHealth {

@@ -66,6 +66,8 @@ struct RepoAddArgs {
     location: String,
     #[arg(long = "password-env-key")]
     password_env_key: Option<String>,
+    #[arg(long = "expected-hostname")]
+    expected_hostname: Option<String>,
     #[arg(long, default_value_t = true, action = ArgAction::Set)]
     enabled: bool,
 }
@@ -120,6 +122,7 @@ fn main() -> Result<()> {
                     args.name,
                     args.location,
                     args.password_env_key,
+                    args.expected_hostname,
                     args.enabled,
                 )?;
                 print_json(&repo)?;
