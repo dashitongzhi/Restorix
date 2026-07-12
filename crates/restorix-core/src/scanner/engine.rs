@@ -114,6 +114,7 @@ pub fn scan(config_store: &ConfigStore) -> ScanResult {
         containers.len(),
         volumes.len(),
         &volume_health,
+        errors.len(),
     );
 
     ScanResult {
@@ -136,6 +137,7 @@ fn build_summary(
     total_containers: usize,
     total_volumes: usize,
     volume_health: &[crate::models::VolumeHealth],
+    global_error_count: usize,
 ) -> ScanSummary {
     ScanSummary {
         scanned_at,
@@ -149,7 +151,7 @@ fn build_summary(
         unprotected_count: count_status(volume_health, HealthStatus::Unprotected),
         stale_count: count_status(volume_health, HealthStatus::Stale),
         unknown_count: count_status(volume_health, HealthStatus::Unknown),
-        error_count: count_status(volume_health, HealthStatus::Error),
+        error_count: global_error_count + count_status(volume_health, HealthStatus::Error),
     }
 }
 

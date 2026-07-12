@@ -107,3 +107,37 @@ fn broken_config_file_is_backed_up_and_defaults_are_loaded() {
         .collect::<Vec<_>>();
     assert_eq!(backups.len(), 1);
 }
+
+#[test]
+fn old_config_missing_new_fields_preserves_existing_repositories() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let path = temp_dir.path().join("config.json");
+    std::fs::write(
+        &path,
+        r#"{
+          "stale_hours": 48,
+          "loose_matching": false,
+          "show_dock_icon": true,
+          "notifications_enabled": false,
+          "cli_path": "",
+          "repositories": [{
+            "id": "repo-1",
+            "name": "Existing Restic",
+            "tool": "Restic",
+            "location": "/tmp/restic",
+            "password_env_key": "RESTIC_PASSWORD",
+            "enabled": true,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+          }]
+        }"#,
+    )
+    .unwrap();
+
+    let config = ConfigStore::new(path).load().unwrap();
+
+    assert_eq!(config.stale_hours, 48);
+    assert!(!config.launch_at_login);
+    assert_eq!(config.repositories.len(), 1);
+    assert_eq!(config.repositories[0].id, "repo-1");
+}
