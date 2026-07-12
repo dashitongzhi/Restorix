@@ -39,6 +39,7 @@ enum L10nKey: String {
     case cli
     case cliPath
     case chooseFolder
+    case confidence
     case containers
     case copy
     case copyCommand
@@ -183,6 +184,7 @@ enum AppStrings {
         .cli: "CLI",
         .cliPath: "CLI path",
         .chooseFolder: "Choose...",
+        .confidence: "Confidence",
         .containers: "Containers",
         .copy: "Copy",
         .copyCommand: "Copy command",
@@ -313,6 +315,7 @@ enum AppStrings {
         .cli: "CLI",
         .cliPath: "CLI 路径",
         .chooseFolder: "选择...",
+        .confidence: "匹配置信度",
         .containers: "容器",
         .copy: "复制",
         .copyCommand: "复制命令",

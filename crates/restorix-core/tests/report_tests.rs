@@ -14,6 +14,7 @@ fn renders_markdown_report_sections() {
     assert!(report.contains("- Docker running: Yes"));
     assert!(report.contains("## Unprotected Volumes"));
     assert!(report.contains("## Unknown Volumes"));
+    assert!(report.contains("## Error Volumes"));
     assert!(report.contains("postgres_data"));
     assert!(report.contains("redis_data"));
     assert!(report.contains("restic restore snap-1"));
@@ -29,6 +30,7 @@ fn renders_simplified_chinese_markdown_report() {
     assert!(report.contains("- Docker 运行中: 是"));
     assert!(report.contains("## 未保护 Volumes"));
     assert!(report.contains("## 未知 Volumes"));
+    assert!(report.contains("## 错误 Volumes"));
     assert!(report.contains("没有可靠的 snapshot 路径匹配这个 Docker volume 挂载点"));
     assert!(report.contains("宽松匹配已关闭"));
 }
@@ -60,7 +62,7 @@ fn scan_result() -> ScanResult {
             unprotected_count: 1,
             stale_count: 0,
             unknown_count: 1,
-            error_count: 0,
+            error_count: 1,
         },
         containers: Vec::new(),
         volumes: vec![volume.clone(), unknown_volume.clone()],
@@ -102,6 +104,22 @@ fn scan_result() -> ScanResult {
                 backup_age_hours: None,
                 restore_command: None,
                 reason: "No enabled backup repositories are configured.".to_string(),
+            },
+            VolumeHealth {
+                volume: DockerVolume {
+                    name: "broken_data".to_string(),
+                    driver: "local".to_string(),
+                    mountpoint: "/var/lib/docker/volumes/broken_data/_data".to_string(),
+                    labels: Vec::new(),
+                },
+                status: HealthStatus::Error,
+                confidence: MatchConfidence::None,
+                matched_repository_id: None,
+                matched_snapshot_id: None,
+                last_backup_time: None,
+                backup_age_hours: None,
+                restore_command: None,
+                reason: "Repository scan failed, so Restorix cannot determine backup health for this volume.".to_string(),
             },
         ],
         warnings: vec!["Loose matching is disabled.".to_string()],

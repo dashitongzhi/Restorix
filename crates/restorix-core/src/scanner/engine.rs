@@ -1,9 +1,7 @@
 use crate::docker::client::DockerClient;
-use crate::models::{
-    HealthStatus, MatchConfidence, Platform, ScanResult, ScanSummary, VolumeHealth,
-};
+use crate::models::{HealthStatus, Platform, ScanResult, ScanSummary, VolumeHealth};
 use crate::restic::client::ResticClient;
-use crate::scanner::health::calculate_volume_health;
+use crate::scanner::health::{calculate_volume_health, mark_repository_failures_unknown};
 use crate::storage::config::ConfigStore;
 use chrono::Utc;
 
@@ -79,32 +77,17 @@ pub fn scan(config_store: &ConfigStore) -> ScanResult {
         );
     }
 
-    let volume_health = if repository_scan_failed && snapshots.is_empty() && !volumes.is_empty() {
-        volumes
-            .iter()
-            .map(|volume| VolumeHealth {
-                volume: volume.clone(),
-                status: HealthStatus::Error,
-                confidence: MatchConfidence::None,
-                matched_repository_id: None,
-                matched_snapshot_id: None,
-                last_backup_time: None,
-                backup_age_hours: None,
-                restore_command: None,
-                reason: "Repository scan failed, so Restorix cannot determine backup health for this volume."
-                    .to_string(),
-            })
-            .collect()
-    } else {
-        calculate_volume_health(
-            &volumes,
-            &repositories,
-            &snapshots,
-            config.stale_hours,
-            config.loose_matching,
-            now,
-        )
-    };
+    let mut volume_health = calculate_volume_health(
+        &volumes,
+        &repositories,
+        &snapshots,
+        config.stale_hours,
+        config.loose_matching,
+        now,
+    );
+    if repository_scan_failed {
+        mark_repository_failures_unknown(&mut volume_health);
+    }
 
     let summary = build_summary(ScanSummaryInput {
         scanned_at: now.to_rfc3339(),

@@ -108,6 +108,18 @@ fn calculate_one_volume_health(
     }
 
     match age_hours {
+        Some(age) if age < 0.0 => VolumeHealth {
+            volume: volume.clone(),
+            status: HealthStatus::Unknown,
+            confidence: snapshot_match.confidence,
+            matched_repository_id: Some(snapshot.repository_id),
+            matched_snapshot_id: Some(snapshot.id),
+            last_backup_time: Some(snapshot.time),
+            backup_age_hours: Some(age),
+            restore_command,
+            reason: "A matching snapshot has a future timestamp, so backup freshness is unknown."
+                .to_string(),
+        },
         Some(age) if age > stale_hours as f64 => VolumeHealth {
             volume: volume.clone(),
             status: HealthStatus::Stale,
@@ -144,6 +156,17 @@ fn calculate_one_volume_health(
             reason: "A matching snapshot was found, but its timestamp could not be parsed."
                 .to_string(),
         },
+    }
+}
+
+pub fn mark_repository_failures_unknown(volume_health: &mut [VolumeHealth]) {
+    for health in volume_health
+        .iter_mut()
+        .filter(|health| health.status == HealthStatus::Unprotected)
+    {
+        health.status = HealthStatus::Unknown;
+        health.reason = "At least one repository scan failed, so Restorix cannot confirm this volume is unprotected."
+            .to_string();
     }
 }
 

@@ -9,6 +9,8 @@ struct AddRepositoryView: View {
     @State private var location = ""
     @State private var passwordEnvKey = "RESTIC_PASSWORD"
     @State private var expectedHostname = ""
+    @State private var errorMessage: String?
+    @State private var isSaving = false
     @State private var enabled = true
     @FocusState private var focusedField: Field?
 
@@ -39,6 +41,13 @@ struct AddRepositoryView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.callout)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             HStack {
                 Spacer()
                 Button(app.text(.cancel)) {
@@ -48,7 +57,7 @@ struct AddRepositoryView: View {
                     addRepository()
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!canAdd)
+                .disabled(!canAdd || isSaving)
             }
         }
         .padding(24)
@@ -86,14 +95,18 @@ struct AddRepositoryView: View {
 
     private func addRepository() {
         Task {
-            await app.addRepository(
+            isSaving = true
+            defer { isSaving = false }
+            errorMessage = await app.addRepository(
                 name: trimmedName,
                 location: trimmedLocation,
                 passwordEnvKey: trimmedPasswordEnvKey,
                 expectedHostname: trimmedExpectedHostname,
                 enabled: enabled
             )
-            dismiss()
+            if errorMessage == nil {
+                dismiss()
+            }
         }
     }
 
