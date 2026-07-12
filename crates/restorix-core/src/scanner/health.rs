@@ -70,6 +70,15 @@ fn calculate_one_volume_health(
         repo.map(|repo| build_restore_command(repo, &snapshot.id, &volume.mountpoint));
 
     if !reliable {
+        let reason = match snapshot_match.confidence {
+            MatchConfidence::ChildPath => {
+                "A snapshot only covers a child path inside this Docker volume, so full-volume protection is unknown."
+            }
+            MatchConfidence::VolumeName => {
+                "Only a volume-name match was found. Enable loose matching to treat this as protected."
+            }
+            _ => "Snapshot coverage is not reliable enough to determine full-volume protection.",
+        };
         return VolumeHealth {
             volume: volume.clone(),
             status: HealthStatus::Unknown,
@@ -79,7 +88,7 @@ fn calculate_one_volume_health(
             last_backup_time: Some(snapshot.time),
             backup_age_hours: age_hours,
             restore_command,
-            reason: "Only a volume-name match was found. Enable loose matching to treat this as protected.".to_string(),
+            reason: reason.to_string(),
         };
     }
 
@@ -142,11 +151,22 @@ pub fn build_restore_command(
     snapshot_id: &str,
     include_path: &str,
 ) -> String {
+    let password_assignment = repo
+        .password_env_key
+        .as_deref()
+        .filter(|key| is_valid_environment_key(key))
+        .map(|key| {
+            format!(" RESTIC_PASSWORD=\"${{{key}:?Set {key} before running this command}}\"")
+        })
+        .unwrap_or_default();
+
     format!(
-        "RESTIC_REPOSITORY=\"{}\" restic restore {} --target ./restorix-restore-test --include \"{}\"",
-        shell_escape(&repo.location),
-        shell_escape(snapshot_id),
-        shell_escape(include_path)
+        "RESTIC_REPOSITORY={}{} restic restore {} --target {} --include {}",
+        shell_quote(&repo.location),
+        password_assignment,
+        shell_quote(snapshot_id),
+        shell_quote("./restorix-restore-test"),
+        shell_quote(include_path)
     )
 }
 
@@ -156,6 +176,12 @@ fn snapshot_age_hours(time: &str, now: DateTime<Utc>) -> Option<f64> {
     Some(duration.num_minutes() as f64 / 60.0)
 }
 
-fn shell_escape(value: &str) -> String {
-    value.replace('\\', "\\\\").replace('"', "\\\"")
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\"'\"'"))
+}
+
+fn is_valid_environment_key(key: &str) -> bool {
+    let mut characters = key.chars();
+    matches!(characters.next(), Some(character) if character == '_' || character.is_ascii_alphabetic())
+        && characters.all(|character| character == '_' || character.is_ascii_alphanumeric())
 }
