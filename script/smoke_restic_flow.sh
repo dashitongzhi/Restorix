@@ -425,7 +425,8 @@ RESTORIX_CONFIG="${CONFIG_PATH}" \
   --tool restic \
   --name "Smoke Restic" \
   --location "${REPO_PATH}" \
-  --password-env-key RESTIC_PASSWORD >/dev/null
+  --password-env-key RESTIC_PASSWORD \
+  --expected-hostname "$(hostname)" >/dev/null
 
 log "Scanning Docker volumes through ${RESTORIX_BIN}."
 SCAN_JSON="$(
