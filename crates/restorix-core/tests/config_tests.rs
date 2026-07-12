@@ -1,5 +1,6 @@
 use restorix_core::models::BackupTool;
 use restorix_core::storage::config::ConfigStore;
+use std::sync::{Arc, Barrier};
 
 #[test]
 fn stores_repository_without_password_value() {
@@ -140,4 +141,49 @@ fn old_config_missing_new_fields_preserves_existing_repositories() {
     assert!(!config.launch_at_login);
     assert_eq!(config.repositories.len(), 1);
     assert_eq!(config.repositories[0].id, "repo-1");
+}
+
+#[test]
+fn concurrent_config_updates_preserve_both_changes() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let store = Arc::new(ConfigStore::new(temp_dir.path().join("config.json")));
+    let barrier = Arc::new(Barrier::new(3));
+
+    let stale_store = Arc::clone(&store);
+    let stale_barrier = Arc::clone(&barrier);
+    let stale_update = std::thread::spawn(move || {
+        stale_barrier.wait();
+        stale_store.set_value("stale_hours", "48")
+    });
+
+    let notification_store = Arc::clone(&store);
+    let notification_barrier = Arc::clone(&barrier);
+    let notification_update = std::thread::spawn(move || {
+        notification_barrier.wait();
+        notification_store.set_value("notifications_enabled", "true")
+    });
+
+    barrier.wait();
+    stale_update.join().unwrap().unwrap();
+    notification_update.join().unwrap().unwrap();
+
+    let config = store.load().unwrap();
+    assert_eq!(config.stale_hours, 48);
+    assert!(config.notifications_enabled);
+}
+
+#[cfg(unix)]
+#[test]
+fn config_file_is_written_with_owner_only_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let store = ConfigStore::new(temp_dir.path().join("config.json"));
+    store.set_value("stale_hours", "48").unwrap();
+
+    let mode = std::fs::metadata(store.path())
+        .unwrap()
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o077, 0);
 }

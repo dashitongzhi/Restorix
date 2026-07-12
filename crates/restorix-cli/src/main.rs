@@ -96,7 +96,7 @@ enum ConfigCommand {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let config_store = ConfigStore::default()?;
+    let config_store = ConfigStore::from_default_path()?;
 
     match cli.command {
         Command::Scan(_) => {

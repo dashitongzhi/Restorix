@@ -106,16 +106,16 @@ pub fn scan(config_store: &ConfigStore) -> ScanResult {
         )
     };
 
-    let summary = build_summary(
-        now.to_rfc3339(),
-        docker_status.installed,
-        docker_status.running,
-        restic_status.installed,
-        containers.len(),
-        volumes.len(),
-        &volume_health,
-        errors.len(),
-    );
+    let summary = build_summary(ScanSummaryInput {
+        scanned_at: now.to_rfc3339(),
+        docker_available: docker_status.installed,
+        docker_running: docker_status.running,
+        restic_available: restic_status.installed,
+        total_containers: containers.len(),
+        total_volumes: volumes.len(),
+        volume_health: &volume_health,
+        global_error_count: errors.len(),
+    });
 
     ScanResult {
         summary,
@@ -129,29 +129,32 @@ pub fn scan(config_store: &ConfigStore) -> ScanResult {
     }
 }
 
-fn build_summary(
+struct ScanSummaryInput<'a> {
     scanned_at: String,
     docker_available: bool,
     docker_running: bool,
     restic_available: bool,
     total_containers: usize,
     total_volumes: usize,
-    volume_health: &[crate::models::VolumeHealth],
+    volume_health: &'a [VolumeHealth],
     global_error_count: usize,
-) -> ScanSummary {
+}
+
+fn build_summary(input: ScanSummaryInput<'_>) -> ScanSummary {
     ScanSummary {
-        scanned_at,
+        scanned_at: input.scanned_at,
         platform: current_platform(),
-        docker_available,
-        docker_running,
-        restic_available,
-        total_containers,
-        total_volumes,
-        protected_count: count_status(volume_health, HealthStatus::Protected),
-        unprotected_count: count_status(volume_health, HealthStatus::Unprotected),
-        stale_count: count_status(volume_health, HealthStatus::Stale),
-        unknown_count: count_status(volume_health, HealthStatus::Unknown),
-        error_count: global_error_count + count_status(volume_health, HealthStatus::Error),
+        docker_available: input.docker_available,
+        docker_running: input.docker_running,
+        restic_available: input.restic_available,
+        total_containers: input.total_containers,
+        total_volumes: input.total_volumes,
+        protected_count: count_status(input.volume_health, HealthStatus::Protected),
+        unprotected_count: count_status(input.volume_health, HealthStatus::Unprotected),
+        stale_count: count_status(input.volume_health, HealthStatus::Stale),
+        unknown_count: count_status(input.volume_health, HealthStatus::Unknown),
+        error_count: input.global_error_count
+            + count_status(input.volume_health, HealthStatus::Error),
     }
 }
 
