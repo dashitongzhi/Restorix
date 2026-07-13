@@ -70,7 +70,7 @@ pub fn match_path(volume: &DockerVolume, snapshot_path: &str) -> MatchConfidence
 pub fn is_reliable_match(confidence: &MatchConfidence, loose_matching: bool) -> bool {
     matches!(
         confidence,
-        MatchConfidence::Exact | MatchConfidence::ParentPath | MatchConfidence::ChildPath
+        MatchConfidence::Exact | MatchConfidence::ParentPath
     ) || (loose_matching && matches!(confidence, MatchConfidence::VolumeName))
 }
 
@@ -102,8 +102,9 @@ fn confidence_rank(confidence: &MatchConfidence) -> u8 {
 
 fn reliable_rank(confidence: &MatchConfidence) -> u8 {
     match confidence {
-        MatchConfidence::Exact | MatchConfidence::ParentPath | MatchConfidence::ChildPath => 2,
-        MatchConfidence::VolumeName | MatchConfidence::Low => 1,
+        MatchConfidence::Exact | MatchConfidence::ParentPath => 3,
+        MatchConfidence::VolumeName | MatchConfidence::Low => 2,
+        MatchConfidence::ChildPath => 1,
         MatchConfidence::None => 0,
     }
 }

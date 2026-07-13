@@ -77,18 +77,23 @@ final class AppViewModel: ObservableObject {
         isAddingRepository = true
     }
 
-    func addRepository(name: String, location: String, passwordEnvKey: String?, enabled: Bool) async {
+    func addRepository(name: String, location: String, passwordEnvKey: String?, password: String?, expectedHostname: String, enabled: Bool) async -> String? {
         do {
             _ = try await coreBridge.addRepository(
                 name: name,
                 location: location,
                 passwordEnvKey: passwordEnvKey,
+                password: password,
+                expectedHostname: expectedHostname,
                 enabled: enabled
             )
             await loadRepositories()
             await scanNow()
+            return nil
         } catch {
-            lastError = error.localizedDescription
+            let message = error.localizedDescription
+            lastError = message
+            return message
         }
     }
 

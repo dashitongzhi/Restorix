@@ -82,10 +82,10 @@ The SwiftUI app does not reimplement Docker or restic parsing. It launches the b
 
 | Status | Meaning | Operator action |
 | --- | --- | --- |
-| `Protected` | A matching restic snapshot covers the Docker volume recently enough. | Monitor and keep the repository enabled. |
+| `Protected` | A recent restic snapshot from the repository's configured hostname covers the Docker volume. This proves path and recency only, not restore or data-integrity testing. | Monitor, run periodic restic integrity checks, and rehearse restores. |
 | `Unprotected` | No usable snapshot was matched for the volume. | Add or repair the restic repository path, then rescan. |
 | `Stale` | A snapshot exists, but it is older than the configured threshold. | Run the backup job and verify the next scan. |
-| `Unknown` | Docker or restic data was incomplete or confidence was too low. | Review paths, repository access, and matching assumptions. |
+| `Unknown` | Docker or restic data was incomplete, the repository has no configured snapshot hostname, or confidence was too low. | Review paths, repository access, hostname selection, and matching assumptions. |
 | `Error` | The scanner hit a hard failure. | Fix the reported dependency, permission, or command issue. |
 
 ## Quick Start
@@ -104,12 +104,6 @@ cargo build
 cargo test
 ```
 
-Check local dependencies:
-
-```bash
-cargo run -p restorix-cli -- docker check --json
-```
-
 Add a restic repository without storing the password in Restorix config:
 
 ```bash
@@ -119,8 +113,11 @@ cargo run -p restorix-cli -- repo add \
   --tool restic \
   --name "Local Restic" \
   --location "/path/to/restic/repo" \
-  --password-env-key RESTIC_PASSWORD
+  --password-env-key RESTIC_PASSWORD \
+  --expected-hostname "$(hostname)"
 ```
+
+`--expected-hostname` must exactly match the `hostname` recorded by the snapshots that belong to this Mac. Repositories imported from older Restorix versions remain readable, but they report `Unknown` until this value is configured.
 
 Scan Docker volume coverage:
 
@@ -229,7 +226,7 @@ For tests and isolated experiments, set:
 export RESTORIX_CONFIG="/tmp/restorix-config.json"
 ```
 
-Repository passwords are referenced by environment variable name, for example `RESTIC_PASSWORD`, instead of being stored directly in the Restorix config file.
+Repository passwords are referenced by environment variable name, for example `RESTIC_PASSWORD`, instead of being stored directly in the Restorix config file. The macOS app stores a password entered while adding a repository in the user's Keychain and injects it only into the corresponding CLI subprocess; CLI automation can continue to provide the named environment variable itself.
 
 ## Repository Layout
 

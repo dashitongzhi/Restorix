@@ -6,7 +6,7 @@ enum NotificationService {
         guard enabled else { return }
 
         let risky = result.volumeHealth.filter { item in
-            item.status == .Unprotected || item.status == .Stale || item.status == .Error
+            item.status == .Unprotected || item.status == .Stale || item.status == .Unknown || item.status == .Error
         }
         guard !risky.isEmpty else { return }
 

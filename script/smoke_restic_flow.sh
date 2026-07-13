@@ -17,8 +17,12 @@ HOME_DIR="${WORK_DIR}/home"
 CONFIG_PATH="${WORK_DIR}/config.json"
 REPO_PATH="${WORK_DIR}/restic-repo"
 PASSWORD="restorix-smoke-password"
-PROTECTED_VOLUME="restorix_smoke_protected"
-UNPROTECTED_VOLUME="restorix_smoke_unprotected"
+SMOKE_RUN_ID="${RESTORIX_SMOKE_RUN_ID:-$(uuidgen | tr '[:upper:]' '[:lower:]')}"
+SMOKE_LABEL_KEY="restorix.smoke-run"
+SMOKE_LABEL_VALUE="${SMOKE_RUN_ID}"
+PROTECTED_VOLUME="restorix_smoke_protected_${SMOKE_RUN_ID}"
+UNPROTECTED_VOLUME="restorix_smoke_unprotected_${SMOKE_RUN_ID}"
+CREATED_VOLUMES=()
 
 log() {
   printf '[restorix-smoke] %s\n' "$*"
@@ -52,7 +56,14 @@ cleanup() {
     run_app_verifier_action disable >/dev/null 2>&1 || true
   fi
   stop_app
-  docker volume rm "${PROTECTED_VOLUME}" "${UNPROTECTED_VOLUME}" >/dev/null 2>&1 || true
+  if (( ${#CREATED_VOLUMES[@]} > 0 )); then
+    for volume in "${CREATED_VOLUMES[@]}"; do
+      label_value="$(docker volume inspect "$volume" --format "{{ index .Labels \"${SMOKE_LABEL_KEY}\" }}" 2>/dev/null || true)"
+      if [[ "$label_value" == "$SMOKE_LABEL_VALUE" ]]; then
+        docker volume rm "$volume" >/dev/null 2>&1 || true
+      fi
+    done
+  fi
   rm -rf "${WORK_DIR}"
 }
 trap cleanup EXIT
@@ -124,6 +135,7 @@ fi
 log "Checking Docker and restic prerequisites."
 command -v docker >/dev/null
 command -v restic >/dev/null
+command -v jq >/dev/null
 docker info >/dev/null
 
 verify_app_bundle() {
@@ -369,9 +381,31 @@ elif [[ ! -x "${RESTORIX_BIN}" ]]; then
   exit 1
 fi
 
+create_smoke_volume() {
+  local volume="$1"
+
+  if docker volume inspect "$volume" >/dev/null 2>&1; then
+    echo "Refusing to reuse an existing Docker volume: $volume" >&2
+    exit 1
+  fi
+
+  docker volume create --label "${SMOKE_LABEL_KEY}=${SMOKE_LABEL_VALUE}" "$volume" >/dev/null
+  CREATED_VOLUMES+=("$volume")
+}
+
+assert_volume_status() {
+  local volume="$1"
+  local expected_status="$2"
+
+  printf '%s\n' "${SCAN_JSON}" | jq -e \
+    --arg volume "$volume" \
+    --arg expected_status "$expected_status" \
+    'any(.volume_health[]?; .volume.name == $volume and .status == $expected_status)' >/dev/null
+}
+
 log "Creating smoke Docker volumes."
-docker volume create "${PROTECTED_VOLUME}" >/dev/null
-docker volume create "${UNPROTECTED_VOLUME}" >/dev/null
+create_smoke_volume "${PROTECTED_VOLUME}"
+create_smoke_volume "${UNPROTECTED_VOLUME}"
 
 log "Initializing temporary restic repository."
 RESTORIX_CONFIG="${CONFIG_PATH}" \
@@ -383,7 +417,7 @@ printf 'restorix smoke test\n' | \
   RESTIC_PASSWORD="${PASSWORD}" \
   restic -r "${REPO_PATH}" backup \
     --stdin \
-    --stdin-filename "/var/lib/docker/volumes/${PROTECTED_VOLUME}/_data/demo.txt" >/dev/null
+    --stdin-filename "/var/lib/docker/volumes/${PROTECTED_VOLUME}/_data" >/dev/null
 
 log "Adding repository through ${RESTORIX_BIN}."
 RESTORIX_CONFIG="${CONFIG_PATH}" \
@@ -391,7 +425,8 @@ RESTORIX_CONFIG="${CONFIG_PATH}" \
   --tool restic \
   --name "Smoke Restic" \
   --location "${REPO_PATH}" \
-  --password-env-key RESTIC_PASSWORD >/dev/null
+  --password-env-key RESTIC_PASSWORD \
+  --expected-hostname "$(hostname)" >/dev/null
 
 log "Scanning Docker volumes through ${RESTORIX_BIN}."
 SCAN_JSON="$(
@@ -400,10 +435,8 @@ SCAN_JSON="$(
   "${RESTORIX_BIN}" scan --json
 )"
 
-printf '%s\n' "${SCAN_JSON}" | grep -q "\"name\": \"${PROTECTED_VOLUME}\""
-printf '%s\n' "${SCAN_JSON}" | grep -q "\"status\": \"Protected\""
-printf '%s\n' "${SCAN_JSON}" | grep -q "\"name\": \"${UNPROTECTED_VOLUME}\""
-printf '%s\n' "${SCAN_JSON}" | grep -q "\"status\": \"Unprotected\""
+assert_volume_status "${PROTECTED_VOLUME}" "Protected"
+assert_volume_status "${UNPROTECTED_VOLUME}" "Unprotected"
 
 log "Rendering Markdown report through ${RESTORIX_BIN}."
 REPORT="$(

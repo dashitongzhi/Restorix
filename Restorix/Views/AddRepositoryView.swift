@@ -8,6 +8,10 @@ struct AddRepositoryView: View {
     @State private var name = ""
     @State private var location = ""
     @State private var passwordEnvKey = "RESTIC_PASSWORD"
+    @State private var password = ""
+    @State private var expectedHostname = ""
+    @State private var errorMessage: String?
+    @State private var isSaving = false
     @State private var enabled = true
     @FocusState private var focusedField: Field?
 
@@ -28,6 +32,9 @@ struct AddRepositoryView: View {
                 }
                 TextField(app.text(.passwordEnv), text: $passwordEnvKey)
                     .focused($focusedField, equals: .passwordEnvKey)
+                SecureField(app.text(.password), text: $password)
+                TextField(app.text(.snapshotHostname), text: $expectedHostname)
+                    .focused($focusedField, equals: .expectedHostname)
                 Toggle(app.text(.enabled), isOn: $enabled)
             }
             .formStyle(.grouped)
@@ -35,6 +42,13 @@ struct AddRepositoryView: View {
             Text(app.text(.envNameOnly))
                 .font(.callout)
                 .foregroundStyle(.secondary)
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.callout)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             HStack {
                 Spacer()
@@ -45,7 +59,7 @@ struct AddRepositoryView: View {
                     addRepository()
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!canAdd)
+                .disabled(!canAdd || isSaving)
             }
         }
         .padding(24)
@@ -61,7 +75,7 @@ struct AddRepositoryView: View {
     }
 
     private var canAdd: Bool {
-        !trimmedName.isEmpty && !trimmedLocation.isEmpty
+        !trimmedName.isEmpty && !trimmedLocation.isEmpty && !trimmedExpectedHostname.isEmpty
     }
 
     private var trimmedName: String {
@@ -77,15 +91,25 @@ struct AddRepositoryView: View {
         return value.isEmpty ? nil : value
     }
 
+    private var trimmedExpectedHostname: String {
+        expectedHostname.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private func addRepository() {
         Task {
-            await app.addRepository(
+            isSaving = true
+            defer { isSaving = false }
+            errorMessage = await app.addRepository(
                 name: trimmedName,
                 location: trimmedLocation,
                 passwordEnvKey: trimmedPasswordEnvKey,
+                password: password,
+                expectedHostname: trimmedExpectedHostname,
                 enabled: enabled
             )
-            dismiss()
+            if errorMessage == nil {
+                dismiss()
+            }
         }
     }
 
@@ -109,4 +133,5 @@ private enum Field {
     case name
     case location
     case passwordEnvKey
+    case expectedHostname
 }

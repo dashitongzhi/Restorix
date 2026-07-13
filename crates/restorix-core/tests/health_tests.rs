@@ -2,7 +2,9 @@ use chrono::{TimeZone, Utc};
 use restorix_core::models::{
     BackupRepository, BackupSnapshot, BackupTool, DockerVolume, HealthStatus, MatchConfidence,
 };
-use restorix_core::scanner::health::calculate_volume_health;
+use restorix_core::scanner::health::{
+    build_restore_command, calculate_volume_health, mark_repository_failures_unknown,
+};
 use restorix_core::scanner::matcher::match_path;
 
 #[test]
@@ -55,7 +57,110 @@ fn recent_reliable_snapshot_marks_volume_protected() {
         .restore_command
         .as_ref()
         .unwrap()
-        .contains("restic restore snap-1"));
+        .contains("restic restore 'snap-1'"));
+}
+
+#[test]
+fn snapshot_from_another_host_never_marks_volume_protected() {
+    let now = Utc.with_ymd_and_hms(2026, 5, 15, 10, 0, 0).unwrap();
+    let mut snapshot = snapshot(
+        "snap-other-host",
+        "2026-05-15T08:00:00Z",
+        "/var/lib/docker/volumes/postgres_data/_data",
+    );
+    snapshot.hostname = Some("other-host".to_string());
+
+    let health = calculate_volume_health(
+        &[volume(
+            "postgres_data",
+            "/var/lib/docker/volumes/postgres_data/_data",
+        )],
+        &[repo()],
+        &[snapshot],
+        72,
+        false,
+        now,
+    );
+
+    assert_eq!(health[0].status, HealthStatus::Unprotected);
+    assert!(health[0].matched_snapshot_id.is_none());
+}
+
+#[test]
+fn repository_without_expected_hostname_is_unknown() {
+    let now = Utc.with_ymd_and_hms(2026, 5, 15, 10, 0, 0).unwrap();
+    let mut repository = repo();
+    repository.expected_hostname = None;
+
+    let health = calculate_volume_health(
+        &[volume(
+            "postgres_data",
+            "/var/lib/docker/volumes/postgres_data/_data",
+        )],
+        &[repository],
+        &[snapshot(
+            "snap-1",
+            "2026-05-15T08:00:00Z",
+            "/var/lib/docker/volumes/postgres_data/_data",
+        )],
+        72,
+        false,
+        now,
+    );
+
+    assert_eq!(health[0].status, HealthStatus::Unknown);
+    assert!(health[0].reason.contains("hostname"));
+}
+
+#[test]
+fn future_snapshot_timestamp_is_not_treated_as_fresh() {
+    let now = Utc.with_ymd_and_hms(2026, 5, 15, 10, 0, 0).unwrap();
+    let health = calculate_volume_health(
+        &[volume(
+            "postgres_data",
+            "/var/lib/docker/volumes/postgres_data/_data",
+        )],
+        &[repo()],
+        &[snapshot(
+            "snap-future",
+            "2026-05-15T12:00:00Z",
+            "/var/lib/docker/volumes/postgres_data/_data",
+        )],
+        72,
+        false,
+        now,
+    );
+
+    assert_eq!(health[0].status, HealthStatus::Unknown);
+    assert!(health[0].reason.contains("future timestamp"));
+}
+
+#[test]
+fn repository_failure_only_downgrades_unconfirmed_volumes() {
+    let now = Utc.with_ymd_and_hms(2026, 5, 15, 10, 0, 0).unwrap();
+    let mut health = calculate_volume_health(
+        &[
+            volume(
+                "postgres_data",
+                "/var/lib/docker/volumes/postgres_data/_data",
+            ),
+            volume("redis_data", "/var/lib/docker/volumes/redis_data/_data"),
+        ],
+        &[repo()],
+        &[snapshot(
+            "snap-1",
+            "2026-05-15T08:00:00Z",
+            "/var/lib/docker/volumes/postgres_data/_data",
+        )],
+        72,
+        false,
+        now,
+    );
+
+    mark_repository_failures_unknown(&mut health);
+
+    assert_eq!(health[0].status, HealthStatus::Protected);
+    assert_eq!(health[1].status, HealthStatus::Unknown);
 }
 
 #[test]
@@ -131,6 +236,61 @@ fn missing_match_marks_volume_unprotected() {
 }
 
 #[test]
+fn child_only_snapshot_marks_volume_unknown() {
+    let now = Utc.with_ymd_and_hms(2026, 5, 15, 10, 0, 0).unwrap();
+    let health = calculate_volume_health(
+        &[volume(
+            "postgres_data",
+            "/var/lib/docker/volumes/postgres_data/_data",
+        )],
+        &[repo()],
+        &[snapshot(
+            "snap-child-only",
+            "2026-05-15T08:00:00Z",
+            "/var/lib/docker/volumes/postgres_data/_data/base/demo.txt",
+        )],
+        72,
+        false,
+        now,
+    );
+
+    assert_eq!(health[0].status, HealthStatus::Unknown);
+    assert_eq!(health[0].confidence, MatchConfidence::ChildPath);
+}
+
+#[test]
+fn restore_command_quotes_untrusted_values_and_maps_password_environment() {
+    let mut repository = repo();
+    repository.location = "s3:bucket/$(printf injected) 'quoted'".to_string();
+    repository.password_env_key = Some("RESTIC_BACKUP_PASSWORD".to_string());
+
+    let command = build_restore_command(
+        &repository,
+        "snapshot; printf injected",
+        "/data/`printf injected`/volume",
+    );
+
+    assert_eq!(
+        command,
+        "RESTIC_REPOSITORY='s3:bucket/$(printf injected) '\"'\"'quoted'\"'\"'' RESTIC_PASSWORD=\"${RESTIC_BACKUP_PASSWORD:?Set RESTIC_BACKUP_PASSWORD before running this command}\" restic restore 'snapshot; printf injected' --target './restorix-restore-test' --include '/data/`printf injected`/volume'"
+    );
+}
+
+#[test]
+fn restore_command_ignores_invalid_password_environment_names() {
+    let mut repository = repo();
+    repository.password_env_key = Some("RESTIC_PASSWORD; printf injected".to_string());
+
+    let command = build_restore_command(&repository, "snapshot", "/data/volume");
+
+    assert!(!command.contains("RESTIC_PASSWORD=\"${RESTIC_PASSWORD;"));
+    assert_eq!(
+        command,
+        "RESTIC_REPOSITORY='/tmp/restic' restic restore 'snapshot' --target './restorix-restore-test' --include '/data/volume'"
+    );
+}
+
+#[test]
 fn volume_name_match_is_unknown_without_loose_matching() {
     let now = Utc.with_ymd_and_hms(2026, 5, 15, 10, 0, 0).unwrap();
     let health = calculate_volume_health(
@@ -169,6 +329,7 @@ fn repo() -> BackupRepository {
         tool: BackupTool::Restic,
         location: "/tmp/restic".to_string(),
         password_env_key: Some("RESTIC_PASSWORD".to_string()),
+        expected_hostname: Some("homelab".to_string()),
         enabled: true,
         created_at: "2026-05-15T00:00:00Z".to_string(),
         updated_at: "2026-05-15T00:00:00Z".to_string(),

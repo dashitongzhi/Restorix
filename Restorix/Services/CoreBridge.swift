@@ -1,8 +1,10 @@
 import Foundation
+import Darwin
 
 final class CoreBridge {
     private let cliURLOverride: URL?
-    private let commandTimeoutSeconds: TimeInterval = 180
+    private let scanTimeoutSeconds: TimeInterval = 600
+    private let defaultCommandTimeoutSeconds: TimeInterval = 60
 
     init(cliURL: URL? = nil) {
         self.cliURLOverride = cliURL
@@ -13,7 +15,8 @@ final class CoreBridge {
     }
 
     func scan() async throws -> ScanResult {
-        let data = try await run(arguments: ["scan", "--json"])
+        let credentials = try await credentials(for: listRepositories())
+        let data = try await run(arguments: ["scan", "--json"], environment: credentials, timeout: scanTimeoutSeconds)
         return try JSONDecoder.restorix.decode(ScanResult.self, from: data)
     }
 
@@ -35,16 +38,19 @@ final class CoreBridge {
     }
 
     func testRepository(id: String) async throws -> [BackupSnapshot] {
-        let data = try await run(arguments: ["repo", "test", id, "--json"])
+        let repositories = try await listRepositories()
+        let credentials = try await credentials(for: repositories.filter { $0.id == id })
+        let data = try await run(arguments: ["repo", "test", id, "--json"], environment: credentials)
         return try JSONDecoder.restorix.decode([BackupSnapshot].self, from: data)
     }
 
-    func addRepository(name: String, location: String, passwordEnvKey: String?, enabled: Bool) async throws -> BackupRepository {
+    func addRepository(name: String, location: String, passwordEnvKey: String?, password: String?, expectedHostname: String, enabled: Bool) async throws -> BackupRepository {
         var arguments = [
             "repo", "add",
             "--tool", "restic",
             "--name", name,
             "--location", location,
+            "--expected-hostname", expectedHostname,
             "--enabled", enabled ? "true" : "false"
         ]
 
@@ -53,11 +59,23 @@ final class CoreBridge {
         }
 
         let data = try await run(arguments: arguments)
-        return try JSONDecoder.restorix.decode(BackupRepository.self, from: data)
+        let repository = try JSONDecoder.restorix.decode(BackupRepository.self, from: data)
+        if let password, let passwordEnvKey, !password.isEmpty {
+            do {
+                try KeychainCredentialStore.save(password, for: passwordEnvKey)
+            } catch {
+                _ = try? await removeRepository(id: repository.id)
+                throw error
+            }
+        }
+        return repository
     }
 
     func exportMarkdownReport(language: AppLanguage = .english) async throws -> String {
-        let data = try await run(arguments: ["report", "markdown", "--language", language.rawValue])
+        let data = try await run(
+            arguments: ["report", "markdown", "--language", language.rawValue],
+            timeout: scanTimeoutSeconds
+        )
         return String(decoding: data, as: UTF8.self)
     }
 
@@ -71,13 +89,13 @@ final class CoreBridge {
         return try JSONDecoder.restorix.decode(AppSettings.self, from: data)
     }
 
-    private func run(arguments: [String]) async throws -> Data {
+    private func run(arguments: [String], environment: [String: String] = [:], timeout: TimeInterval? = nil) async throws -> Data {
         try await withCheckedThrowingContinuation { continuation in
             let process = Process()
             let stdout = Pipe()
             let stderr = Pipe()
             let cliURL = resolveCLIURL()
-            let commandTimeoutSeconds = self.commandTimeoutSeconds
+            let commandTimeoutSeconds = timeout ?? defaultCommandTimeoutSeconds
 
             process.executableURL = cliURL
             process.arguments = arguments
@@ -85,33 +103,37 @@ final class CoreBridge {
             process.standardError = stderr
             process.environment = ProcessInfo.processInfo.environment.merging([
                 "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-            ]) { current, _ in current }
+            ]) { _, controlled in controlled }.merging(environment) { _, credential in credential }
 
             let state = ProcessRunState()
+            let output = PipeOutputCollector(pipe: stdout)
+            let errors = PipeOutputCollector(pipe: stderr)
             let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
             timer.schedule(deadline: .now() + commandTimeoutSeconds)
             timer.setEventHandler {
                 guard process.isRunning else { return }
+                state.markTimedOut()
                 process.terminate()
                 DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
                     if process.isRunning {
-                        process.interrupt()
+                        kill(process.processIdentifier, SIGKILL)
                     }
-                }
-                state.finish {
-                    continuation.resume(
-                        throwing: CoreBridgeError.commandTimedOut(arguments.joined(separator: " "), Int(commandTimeoutSeconds))
-                    )
                 }
             }
             timer.resume()
 
             process.terminationHandler = { process in
                 timer.cancel()
-                let outputData = stdout.fileHandleForReading.readDataToEndOfFile()
-                let errorData = stderr.fileHandleForReading.readDataToEndOfFile()
+                let outputData = output.finish()
+                let errorData = errors.finish()
 
-                if process.terminationStatus == 0 {
+                if state.didTimeOut {
+                    state.finish {
+                        continuation.resume(
+                            throwing: CoreBridgeError.commandTimedOut(arguments.joined(separator: " "), Int(commandTimeoutSeconds))
+                        )
+                    }
+                } else if process.terminationStatus == 0 {
                     state.finish {
                         continuation.resume(returning: outputData)
                     }
@@ -127,6 +149,8 @@ final class CoreBridge {
                 try process.run()
             } catch {
                 timer.cancel()
+                output.finish()
+                errors.finish()
                 state.finish {
                     continuation.resume(throwing: CoreBridgeError.launchFailed(cliURL.path, error.localizedDescription))
                 }
@@ -140,6 +164,17 @@ final class CoreBridge {
         }
 
         return Self.defaultCLIURL()
+    }
+
+    private func credentials(for repositories: [BackupRepository]) throws -> [String: String] {
+        var credentials: [String: String] = [:]
+        for key in Set(repositories.compactMap(\.passwordEnvKey)) {
+            guard let password = try KeychainCredentialStore.password(for: key) else {
+                throw CoreBridgeError.missingKeychainCredential(key)
+            }
+            credentials[key] = password
+        }
+        return credentials
     }
 
     private static func defaultCLIURL() -> URL {
@@ -269,6 +304,7 @@ enum CoreBridgeError: LocalizedError {
     case commandFailed(String)
     case commandTimedOut(String, Int)
     case launchFailed(String, String)
+    case missingKeychainCredential(String)
 
     var errorDescription: String? {
         switch self {
@@ -278,6 +314,8 @@ enum CoreBridgeError: LocalizedError {
             return "Restorix command timed out after \(seconds)s: \(command)"
         case .launchFailed(let path, let message):
             return "Restorix could not launch the CLI at \(path). \(message)"
+        case .missingKeychainCredential(let key):
+            return "No Keychain credential is available for \(key). Add or update the repository password in Restorix."
         }
     }
 }
@@ -286,6 +324,19 @@ private final class ProcessRunState: @unchecked Sendable {
     private let lock = NSLock()
     nonisolated(unsafe)
     private var finished = false
+    private var timedOut = false
+
+    var didTimeOut: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return timedOut
+    }
+
+    func markTimedOut() {
+        lock.lock()
+        timedOut = true
+        lock.unlock()
+    }
 
     nonisolated
     func finish(_ action: () -> Void) {
@@ -297,6 +348,49 @@ private final class ProcessRunState: @unchecked Sendable {
         finished = true
         lock.unlock()
         action()
+    }
+}
+
+private final class PipeOutputCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private let handle: FileHandle
+    private var data = Data()
+    private var isFinished = false
+
+    init(pipe: Pipe) {
+        handle = pipe.fileHandleForReading
+        handle.readabilityHandler = { [weak self] handle in
+            let chunk = handle.availableData
+            guard !chunk.isEmpty else {
+                handle.readabilityHandler = nil
+                return
+            }
+            self?.append(chunk)
+        }
+    }
+
+    func finish() -> Data {
+        lock.lock()
+        guard !isFinished else {
+            let result = data
+            lock.unlock()
+            return result
+        }
+        isFinished = true
+        lock.unlock()
+
+        handle.readabilityHandler = nil
+        append(handle.readDataToEndOfFile())
+
+        lock.lock()
+        defer { lock.unlock() }
+        return data
+    }
+
+    private func append(_ chunk: Data) {
+        lock.lock()
+        data.append(chunk)
+        lock.unlock()
     }
 }
 

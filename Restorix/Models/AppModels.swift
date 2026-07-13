@@ -68,6 +68,7 @@ struct BackupRepository: Codable, Identifiable {
     let tool: BackupTool
     let location: String
     let passwordEnvKey: String?
+    let expectedHostname: String?
     let enabled: Bool
     let createdAt: String
     let updatedAt: String
@@ -78,6 +79,7 @@ struct BackupRepository: Codable, Identifiable {
         case tool
         case location
         case passwordEnvKey = "password_env_key"
+        case expectedHostname = "expected_hostname"
         case enabled
         case createdAt = "created_at"
         case updatedAt = "updated_at"

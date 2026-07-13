@@ -39,6 +39,7 @@ enum L10nKey: String {
     case cli
     case cliPath
     case chooseFolder
+    case confidence
     case containers
     case copy
     case copyCommand
@@ -91,6 +92,7 @@ enum L10nKey: String {
     case openVolumes
     case productSubtitle
     case passwordEnv
+    case password
     case protected
     case reason
     case repositories
@@ -104,6 +106,7 @@ enum L10nKey: String {
     case resticRepoAddTitle
     case restoreCommand
     case safeRestoreCommand
+    case snapshotHostname
     case save
     case saveSettings
     case scan
@@ -182,6 +185,7 @@ enum AppStrings {
         .cli: "CLI",
         .cliPath: "CLI path",
         .chooseFolder: "Choose...",
+        .confidence: "Confidence",
         .containers: "Containers",
         .copy: "Copy",
         .copyCommand: "Copy command",
@@ -234,6 +238,7 @@ enum AppStrings {
         .openVolumes: "Open Volumes",
         .productSubtitle: "Restorix checks whether Docker volumes are actually restorable.",
         .passwordEnv: "Password env",
+        .password: "Repository password (stored in Keychain)",
         .protected: "Protected",
         .reason: "Reason",
         .repositories: "Repositories",
@@ -247,6 +252,7 @@ enum AppStrings {
         .resticRepoAddTitle: "Add a restic repository",
         .restoreCommand: "Restore command",
         .safeRestoreCommand: "Safe restore command",
+        .snapshotHostname: "Snapshot hostname",
         .save: "Save",
         .saveSettings: "Save Settings",
         .scan: "Scan",
@@ -311,6 +317,7 @@ enum AppStrings {
         .cli: "CLI",
         .cliPath: "CLI 路径",
         .chooseFolder: "选择...",
+        .confidence: "匹配置信度",
         .containers: "容器",
         .copy: "复制",
         .copyCommand: "复制命令",
@@ -363,6 +370,7 @@ enum AppStrings {
         .openVolumes: "打开 Volumes",
         .productSubtitle: "Restorix 会检查 Docker volumes 是否真的可恢复。",
         .passwordEnv: "密码环境变量",
+        .password: "仓库密码（存储在钥匙串）",
         .protected: "已保护",
         .reason: "原因",
         .repositories: "仓库",
@@ -376,6 +384,7 @@ enum AppStrings {
         .resticRepoAddTitle: "添加 restic 仓库",
         .restoreCommand: "恢复命令",
         .safeRestoreCommand: "安全恢复命令",
+        .snapshotHostname: "快照主机名",
         .save: "保存",
         .saveSettings: "保存设置",
         .scan: "扫描",

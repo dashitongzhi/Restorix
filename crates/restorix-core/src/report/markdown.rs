@@ -129,12 +129,50 @@ pub fn render_markdown_report_with_language(
     render_unprotected(&mut report, &result.volume_health, language);
     render_stale(&mut report, &result.volume_health, language);
     render_unknown(&mut report, &result.volume_health, language);
+    render_errors(&mut report, &result.volume_health, language);
     render_protected(&mut report, &result.volume_health, language);
     render_restore_commands(&mut report, &result.volume_health, language);
     render_messages(&mut report, Label::Warnings, &result.warnings, language);
     render_messages(&mut report, Label::Errors, &result.errors, language);
 
     report
+}
+
+fn render_errors(report: &mut String, health: &[VolumeHealth], language: ReportLanguage) {
+    let rows = health
+        .iter()
+        .filter(|item| item.status == HealthStatus::Error)
+        .collect::<Vec<_>>();
+    if rows.is_empty() {
+        return;
+    }
+
+    push_line(
+        report,
+        &format!("## {}", label(language, Label::ErrorVolumes)),
+    );
+    push_line(
+        report,
+        &format!(
+            "| {} | {} | {} |",
+            label(language, Label::Volume),
+            label(language, Label::Mountpoint),
+            label(language, Label::Reason)
+        ),
+    );
+    push_line(report, "|---|---|---|");
+    for item in rows {
+        push_line(
+            report,
+            &format!(
+                "| {} | {} | {} |",
+                escape_table(&item.volume.name),
+                escape_table(&item.volume.mountpoint),
+                escape_table(&localized_message(language, &item.reason))
+            ),
+        );
+    }
+    push_line(report, "");
 }
 
 fn render_unknown(report: &mut String, health: &[VolumeHealth], language: ReportLanguage) {
@@ -383,6 +421,15 @@ fn localized_message(language: ReportLanguage, value: &str) -> String {
         "A matching snapshot was found, but its timestamp could not be parsed." => {
             "找到了匹配的 snapshot，但无法解析它的时间戳。".to_string()
         }
+        "A matching snapshot has a future timestamp, so backup freshness is unknown." => {
+            "匹配的 snapshot 时间戳在未来，因此无法判断备份是否新鲜。".to_string()
+        }
+        "At least one repository scan failed, so Restorix cannot confirm this volume is unprotected." => {
+            "至少一个仓库扫描失败，因此 Restorix 无法确认这个 volume 未受保护。".to_string()
+        }
+        "An enabled repository has no expected snapshot hostname, so Restorix cannot prove host-specific backup coverage." => {
+            "已启用仓库未配置预期快照主机名，因此 Restorix 无法证明此主机的备份覆盖。".to_string()
+        }
         "Repository scan failed, so Restorix cannot determine backup health for this volume." => {
             "仓库扫描失败，因此 Restorix 无法判断这个 volume 的备份健康状态。".to_string()
         }
@@ -427,6 +474,7 @@ enum Label {
     AgeHours,
     Available,
     Errors,
+    ErrorVolumes,
     GeneratedAt,
     LastBackup,
     Mountpoint,
@@ -455,6 +503,7 @@ fn label(language: ReportLanguage, label: Label) -> &'static str {
         (ReportLanguage::English, Label::AgeHours) => "Age Hours",
         (ReportLanguage::English, Label::Available) => "available",
         (ReportLanguage::English, Label::Errors) => "Errors",
+        (ReportLanguage::English, Label::ErrorVolumes) => "Error Volumes",
         (ReportLanguage::English, Label::GeneratedAt) => "Generated at",
         (ReportLanguage::English, Label::LastBackup) => "Last Backup",
         (ReportLanguage::English, Label::Mountpoint) => "Mountpoint",
@@ -479,6 +528,7 @@ fn label(language: ReportLanguage, label: Label) -> &'static str {
         (ReportLanguage::SimplifiedChinese, Label::AgeHours) => "小时",
         (ReportLanguage::SimplifiedChinese, Label::Available) => "可用",
         (ReportLanguage::SimplifiedChinese, Label::Errors) => "错误",
+        (ReportLanguage::SimplifiedChinese, Label::ErrorVolumes) => "错误 Volumes",
         (ReportLanguage::SimplifiedChinese, Label::GeneratedAt) => "生成时间",
         (ReportLanguage::SimplifiedChinese, Label::LastBackup) => "最近备份",
         (ReportLanguage::SimplifiedChinese, Label::Mountpoint) => "挂载路径",

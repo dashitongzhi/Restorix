@@ -1,9 +1,7 @@
 use crate::docker::client::DockerClient;
-use crate::models::{
-    HealthStatus, MatchConfidence, Platform, ScanResult, ScanSummary, VolumeHealth,
-};
+use crate::models::{HealthStatus, Platform, ScanResult, ScanSummary, VolumeHealth};
 use crate::restic::client::ResticClient;
-use crate::scanner::health::calculate_volume_health;
+use crate::scanner::health::{calculate_volume_health, mark_repository_failures_unknown};
 use crate::storage::config::ConfigStore;
 use chrono::Utc;
 
@@ -44,8 +42,11 @@ pub fn scan(config_store: &ConfigStore) -> ScanResult {
     };
 
     let volumes = if docker_status.running {
-        match docker.scan_volumes() {
-            Ok(volumes) => volumes,
+        match docker.scan_volumes_with_errors() {
+            Ok(scan) => {
+                errors.extend(scan.errors);
+                scan.volumes
+            }
             Err(error) => {
                 errors.push(error.to_string());
                 Vec::new()
@@ -79,42 +80,28 @@ pub fn scan(config_store: &ConfigStore) -> ScanResult {
         );
     }
 
-    let volume_health = if repository_scan_failed && snapshots.is_empty() && !volumes.is_empty() {
-        volumes
-            .iter()
-            .map(|volume| VolumeHealth {
-                volume: volume.clone(),
-                status: HealthStatus::Error,
-                confidence: MatchConfidence::None,
-                matched_repository_id: None,
-                matched_snapshot_id: None,
-                last_backup_time: None,
-                backup_age_hours: None,
-                restore_command: None,
-                reason: "Repository scan failed, so Restorix cannot determine backup health for this volume."
-                    .to_string(),
-            })
-            .collect()
-    } else {
-        calculate_volume_health(
-            &volumes,
-            &repositories,
-            &snapshots,
-            config.stale_hours,
-            config.loose_matching,
-            now,
-        )
-    };
-
-    let summary = build_summary(
-        now.to_rfc3339(),
-        docker_status.installed,
-        docker_status.running,
-        restic_status.installed,
-        containers.len(),
-        volumes.len(),
-        &volume_health,
+    let mut volume_health = calculate_volume_health(
+        &volumes,
+        &repositories,
+        &snapshots,
+        config.stale_hours,
+        config.loose_matching,
+        now,
     );
+    if repository_scan_failed {
+        mark_repository_failures_unknown(&mut volume_health);
+    }
+
+    let summary = build_summary(ScanSummaryInput {
+        scanned_at: now.to_rfc3339(),
+        docker_available: docker_status.installed,
+        docker_running: docker_status.running,
+        restic_available: restic_status.installed,
+        total_containers: containers.len(),
+        total_volumes: volumes.len(),
+        volume_health: &volume_health,
+        global_error_count: errors.len(),
+    });
 
     ScanResult {
         summary,
@@ -128,28 +115,32 @@ pub fn scan(config_store: &ConfigStore) -> ScanResult {
     }
 }
 
-fn build_summary(
+struct ScanSummaryInput<'a> {
     scanned_at: String,
     docker_available: bool,
     docker_running: bool,
     restic_available: bool,
     total_containers: usize,
     total_volumes: usize,
-    volume_health: &[crate::models::VolumeHealth],
-) -> ScanSummary {
+    volume_health: &'a [VolumeHealth],
+    global_error_count: usize,
+}
+
+fn build_summary(input: ScanSummaryInput<'_>) -> ScanSummary {
     ScanSummary {
-        scanned_at,
+        scanned_at: input.scanned_at,
         platform: current_platform(),
-        docker_available,
-        docker_running,
-        restic_available,
-        total_containers,
-        total_volumes,
-        protected_count: count_status(volume_health, HealthStatus::Protected),
-        unprotected_count: count_status(volume_health, HealthStatus::Unprotected),
-        stale_count: count_status(volume_health, HealthStatus::Stale),
-        unknown_count: count_status(volume_health, HealthStatus::Unknown),
-        error_count: count_status(volume_health, HealthStatus::Error),
+        docker_available: input.docker_available,
+        docker_running: input.docker_running,
+        restic_available: input.restic_available,
+        total_containers: input.total_containers,
+        total_volumes: input.total_volumes,
+        protected_count: count_status(input.volume_health, HealthStatus::Protected),
+        unprotected_count: count_status(input.volume_health, HealthStatus::Unprotected),
+        stale_count: count_status(input.volume_health, HealthStatus::Stale),
+        unknown_count: count_status(input.volume_health, HealthStatus::Unknown),
+        error_count: input.global_error_count
+            + count_status(input.volume_health, HealthStatus::Error),
     }
 }
 

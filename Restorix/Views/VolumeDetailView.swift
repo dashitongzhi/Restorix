@@ -23,6 +23,8 @@ struct VolumeDetailView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
+            LabeledContent(app.text(.confidence), value: item.confidence.rawValue)
+
             if let command = item.restoreCommand {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(app.text(.safeRestoreCommand))

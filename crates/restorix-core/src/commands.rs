@@ -45,10 +45,18 @@ pub fn add_repository(
     name: String,
     location: String,
     password_env_key: Option<String>,
+    expected_hostname: Option<String>,
     enabled: bool,
 ) -> Result<BackupRepository> {
     let tool = parse_tool(tool)?;
-    config_store.add_repository(name, tool, location, password_env_key, enabled)
+    config_store.add_repository(
+        name,
+        tool,
+        location,
+        password_env_key,
+        expected_hostname,
+        enabled,
+    )
 }
 
 pub fn list_repositories(config_store: &ConfigStore) -> Result<Vec<BackupRepository>> {

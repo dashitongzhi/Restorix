@@ -82,10 +82,10 @@ SwiftUI 应用不会重新实现 Docker 或 restic 解析逻辑。它通过 `Pro
 
 | 状态 | 含义 | 运维动作 |
 | --- | --- | --- |
-| `Protected` | 找到了足够新的 restic 快照覆盖该 Docker 卷。 | 持续监控，并保持仓库启用。 |
+| `Protected` | 仓库配置的主机名下存在足够新的 restic 快照覆盖该 Docker 卷。它只证明路径与时效，不证明恢复演练或数据完整性。 | 持续监控、定期运行 restic 完整性检查，并演练恢复。 |
 | `Unprotected` | 没有为该卷匹配到可用快照。 | 添加或修复 restic 仓库路径，然后重新扫描。 |
 | `Stale` | 存在快照，但已经超过配置的过期阈值。 | 运行备份任务，并用下一次扫描确认。 |
-| `Unknown` | Docker 或 restic 数据不完整，或匹配置信度过低。 | 检查路径、仓库访问权限和匹配假设。 |
+| `Unknown` | Docker 或 restic 数据不完整、仓库未配置快照主机名，或匹配置信度过低。 | 检查路径、仓库访问权限、主机名选择和匹配假设。 |
 | `Error` | 扫描过程遇到硬错误。 | 根据错误信息修复依赖、权限或命令问题。 |
 
 ## 快速开始
@@ -119,8 +119,11 @@ cargo run -p restorix-cli -- repo add \
   --tool restic \
   --name "Local Restic" \
   --location "/path/to/restic/repo" \
-  --password-env-key RESTIC_PASSWORD
+  --password-env-key RESTIC_PASSWORD \
+  --expected-hostname "$(hostname)"
 ```
+
+`--expected-hostname` 必须与属于此 Mac 的快照中的 `hostname` 完全一致。从旧版 Restorix 导入的仓库仍可读取，但在配置此值前只会显示 `Unknown`。
 
 扫描 Docker 卷备份覆盖情况：
 

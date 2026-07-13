@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::{ArgAction, Args, Parser, Subcommand};
 use restorix_core::commands;
+use restorix_core::report::markdown::{render_markdown_report_with_language, ReportLanguage};
 use restorix_core::storage::config::ConfigStore;
 
 #[derive(Debug, Parser)]
@@ -65,6 +66,8 @@ struct RepoAddArgs {
     location: String,
     #[arg(long = "password-env-key")]
     password_env_key: Option<String>,
+    #[arg(long = "expected-hostname")]
+    expected_hostname: Option<String>,
     #[arg(long, default_value_t = true, action = ArgAction::Set)]
     enabled: bool,
 }
@@ -95,10 +98,17 @@ enum ConfigCommand {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let config_store = ConfigStore::default()?;
+    let config_store = ConfigStore::from_default_path()?;
 
     match cli.command {
-        Command::Scan(_) => print_json(&commands::scan_json(&config_store))?,
+        Command::Scan(_) => {
+            let result = commands::scan_json(&config_store);
+            let has_errors = !result.errors.is_empty();
+            print_json(&result)?;
+            if has_errors {
+                std::process::exit(2);
+            }
+        }
         Command::Docker { command } => match command {
             DockerCommand::Check(_) => print_json(&commands::docker_check_json())?,
             DockerCommand::Containers(_) => print_json(&commands::docker_containers_json()?)?,
@@ -112,6 +122,7 @@ fn main() -> Result<()> {
                     args.name,
                     args.location,
                     args.password_env_key,
+                    args.expected_hostname,
                     args.enabled,
                 )?;
                 print_json(&repo)?;
@@ -141,10 +152,17 @@ fn main() -> Result<()> {
         },
         Command::Report { command } => match command {
             ReportCommand::Markdown(args) => {
+                let result = commands::scan_json(&config_store);
                 print!(
                     "{}",
-                    commands::markdown_report_with_language(&config_store, &args.language)
+                    render_markdown_report_with_language(
+                        &result,
+                        ReportLanguage::from_code(&args.language)
+                    )
                 );
+                if !result.errors.is_empty() {
+                    std::process::exit(2);
+                }
             }
         },
         Command::Config { command } => match command {
