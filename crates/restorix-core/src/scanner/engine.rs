@@ -2,14 +2,28 @@ use crate::docker::client::DockerClient;
 use crate::models::{HealthStatus, Platform, ScanResult, ScanSummary, VolumeHealth};
 use crate::restic::client::ResticClient;
 use crate::scanner::health::{calculate_volume_health, mark_repository_failures_unknown};
+use crate::scanner::sources::{BackupSource, Clock, ConfigSource, DockerSource, SystemClock};
 use crate::storage::config::ConfigStore;
-use chrono::Utc;
 
 pub fn scan(config_store: &ConfigStore) -> ScanResult {
-    let now = Utc::now();
+    scan_with_sources(
+        config_store,
+        &DockerClient::new(),
+        &ResticClient::new(),
+        &SystemClock,
+    )
+}
+
+fn scan_with_sources(
+    config_source: &impl ConfigSource,
+    docker: &impl DockerSource,
+    backup: &impl BackupSource,
+    clock: &impl Clock,
+) -> ScanResult {
+    let now = clock.now();
     let mut warnings = Vec::new();
     let mut errors = Vec::new();
-    let config = match config_store.load() {
+    let config = match config_source.load_config() {
         Ok(config) => config,
         Err(error) => {
             errors.push(error.to_string());
@@ -17,10 +31,8 @@ pub fn scan(config_store: &ConfigStore) -> ScanResult {
         }
     };
 
-    let docker = DockerClient::new();
-    let restic = ResticClient::new();
-    let docker_status = docker.check();
-    let restic_status = restic.check();
+    let docker_status = docker.status();
+    let restic_status = backup.status();
 
     if let Some(message) = &docker_status.message {
         errors.push(message.clone());
@@ -30,7 +42,7 @@ pub fn scan(config_store: &ConfigStore) -> ScanResult {
     }
 
     let containers = if docker_status.running {
-        match docker.scan_containers() {
+        match docker.containers() {
             Ok(containers) => containers,
             Err(error) => {
                 errors.push(error.to_string());
@@ -42,7 +54,7 @@ pub fn scan(config_store: &ConfigStore) -> ScanResult {
     };
 
     let volumes = if docker_status.running {
-        match docker.scan_volumes_with_errors() {
+        match docker.volumes() {
             Ok(scan) => {
                 errors.extend(scan.errors);
                 scan.volumes
@@ -64,7 +76,7 @@ pub fn scan(config_store: &ConfigStore) -> ScanResult {
 
     if restic_status.installed {
         for repo in repositories.iter().filter(|repo| repo.enabled) {
-            match restic.snapshots(repo) {
+            match backup.snapshots(repo) {
                 Ok(mut repo_snapshots) => snapshots.append(&mut repo_snapshots),
                 Err(error) => {
                     repository_scan_failed = true;
@@ -114,6 +126,9 @@ pub fn scan(config_store: &ConfigStore) -> ScanResult {
         errors,
     }
 }
+
+#[cfg(test)]
+mod tests;
 
 struct ScanSummaryInput<'a> {
     scanned_at: String,
