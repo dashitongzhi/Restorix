@@ -80,6 +80,21 @@ struct CLICommandRunnerSmoke {
         let report = try await bridge.exportMarkdownReport()
         try require(report.contains("## Errors"), "bridge accepts report exit code 2")
 
+        let renderedEnglish = MarkdownReportRenderer.render(
+            scan,
+            language: .english,
+            repositoryName: { $0 ?? "None" }
+        )
+        try require(renderedEnglish.contains("## Errors"), "English report rendering")
+        try require(renderedEnglish.contains("docker unavailable"), "English report diagnostics")
+
+        let renderedChinese = MarkdownReportRenderer.render(
+            scan,
+            language: .simplifiedChinese,
+            repositoryName: { $0 ?? "无" }
+        )
+        try require(renderedChinese.contains("## 错误"), "Chinese report rendering")
+
         print("CLICommandRunner smoke passed")
     }
 
