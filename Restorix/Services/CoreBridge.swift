@@ -1,13 +1,17 @@
 import Foundation
-import Darwin
 
 final class CoreBridge {
     private let cliURLOverride: URL?
+    private let commandRunner: any CLICommandRunning
     private let scanTimeoutSeconds: TimeInterval = 600
     private let defaultCommandTimeoutSeconds: TimeInterval = 60
 
-    init(cliURL: URL? = nil) {
+    init(
+        cliURL: URL? = nil,
+        commandRunner: any CLICommandRunning = CLICommandRunner()
+    ) {
         self.cliURLOverride = cliURL
+        self.commandRunner = commandRunner
     }
 
     func resolvedCLIURLForVerification() -> URL {
@@ -15,8 +19,14 @@ final class CoreBridge {
     }
 
     func scan() async throws -> ScanResult {
-        let credentials = try await credentials(for: listRepositories())
-        let data = try await run(arguments: ["scan", "--json"], environment: credentials, timeout: scanTimeoutSeconds)
+        let repositories = try await listRepositories()
+        let credentials = try credentials(for: repositories)
+        let data = try await run(
+            arguments: ["scan", "--json"],
+            environment: credentials,
+            timeout: scanTimeoutSeconds,
+            accepting: [0, 2]
+        )
         return try JSONDecoder.restorix.decode(ScanResult.self, from: data)
     }
 
@@ -39,7 +49,7 @@ final class CoreBridge {
 
     func testRepository(id: String) async throws -> [BackupSnapshot] {
         let repositories = try await listRepositories()
-        let credentials = try await credentials(for: repositories.filter { $0.id == id })
+        let credentials = try credentials(for: repositories.filter { $0.id == id })
         let data = try await run(arguments: ["repo", "test", id, "--json"], environment: credentials)
         return try JSONDecoder.restorix.decode([BackupSnapshot].self, from: data)
     }
@@ -74,7 +84,8 @@ final class CoreBridge {
     func exportMarkdownReport(language: AppLanguage = .english) async throws -> String {
         let data = try await run(
             arguments: ["report", "markdown", "--language", language.rawValue],
-            timeout: scanTimeoutSeconds
+            timeout: scanTimeoutSeconds,
+            accepting: [0, 2]
         )
         return String(decoding: data, as: UTF8.self)
     }
@@ -89,73 +100,20 @@ final class CoreBridge {
         return try JSONDecoder.restorix.decode(AppSettings.self, from: data)
     }
 
-    private func run(arguments: [String], environment: [String: String] = [:], timeout: TimeInterval? = nil) async throws -> Data {
-        try await withCheckedThrowingContinuation { continuation in
-            let process = Process()
-            let stdout = Pipe()
-            let stderr = Pipe()
-            let cliURL = resolveCLIURL()
-            let commandTimeoutSeconds = timeout ?? defaultCommandTimeoutSeconds
-
-            process.executableURL = cliURL
-            process.arguments = arguments
-            process.standardOutput = stdout
-            process.standardError = stderr
-            process.environment = ProcessInfo.processInfo.environment.merging([
-                "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-            ]) { _, controlled in controlled }.merging(environment) { _, credential in credential }
-
-            let state = ProcessRunState()
-            let output = PipeOutputCollector(pipe: stdout)
-            let errors = PipeOutputCollector(pipe: stderr)
-            let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
-            timer.schedule(deadline: .now() + commandTimeoutSeconds)
-            timer.setEventHandler {
-                guard process.isRunning else { return }
-                state.markTimedOut()
-                process.terminate()
-                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
-                    if process.isRunning {
-                        kill(process.processIdentifier, SIGKILL)
-                    }
-                }
-            }
-            timer.resume()
-
-            process.terminationHandler = { process in
-                timer.cancel()
-                let outputData = output.finish()
-                let errorData = errors.finish()
-
-                if state.didTimeOut {
-                    state.finish {
-                        continuation.resume(
-                            throwing: CoreBridgeError.commandTimedOut(arguments.joined(separator: " "), Int(commandTimeoutSeconds))
-                        )
-                    }
-                } else if process.terminationStatus == 0 {
-                    state.finish {
-                        continuation.resume(returning: outputData)
-                    }
-                } else {
-                    let errorText = String(decoding: errorData, as: UTF8.self)
-                    state.finish {
-                        continuation.resume(throwing: CoreBridgeError.commandFailed(errorText))
-                    }
-                }
-            }
-
-            do {
-                try process.run()
-            } catch {
-                timer.cancel()
-                output.finish()
-                errors.finish()
-                state.finish {
-                    continuation.resume(throwing: CoreBridgeError.launchFailed(cliURL.path, error.localizedDescription))
-                }
-            }
-        }
+    private func run(
+        arguments: [String],
+        environment: [String: String] = [:],
+        timeout: TimeInterval? = nil,
+        accepting acceptedExitCodes: Set<Int32> = [0]
+    ) async throws -> Data {
+        let command = arguments.joined(separator: " ")
+        let result = try await commandRunner.run(
+            executableURL: resolveCLIURL(),
+            arguments: arguments,
+            environment: environment,
+            timeout: timeout ?? defaultCommandTimeoutSeconds
+        )
+        return try result.output(accepting: acceptedExitCodes, command: command)
     }
 
     private func resolveCLIURL() -> URL {
@@ -297,100 +255,6 @@ final class CoreBridge {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first?
             .appendingPathComponent("Restorix", isDirectory: true)
-    }
-}
-
-enum CoreBridgeError: LocalizedError {
-    case commandFailed(String)
-    case commandTimedOut(String, Int)
-    case launchFailed(String, String)
-    case missingKeychainCredential(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .commandFailed(let message):
-            return message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Restorix command failed." : message
-        case .commandTimedOut(let command, let seconds):
-            return "Restorix command timed out after \(seconds)s: \(command)"
-        case .launchFailed(let path, let message):
-            return "Restorix could not launch the CLI at \(path). \(message)"
-        case .missingKeychainCredential(let key):
-            return "No Keychain credential is available for \(key). Add or update the repository password in Restorix."
-        }
-    }
-}
-
-private final class ProcessRunState: @unchecked Sendable {
-    private let lock = NSLock()
-    nonisolated(unsafe)
-    private var finished = false
-    private var timedOut = false
-
-    var didTimeOut: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return timedOut
-    }
-
-    func markTimedOut() {
-        lock.lock()
-        timedOut = true
-        lock.unlock()
-    }
-
-    nonisolated
-    func finish(_ action: () -> Void) {
-        lock.lock()
-        if finished {
-            lock.unlock()
-            return
-        }
-        finished = true
-        lock.unlock()
-        action()
-    }
-}
-
-private final class PipeOutputCollector: @unchecked Sendable {
-    private let lock = NSLock()
-    private let handle: FileHandle
-    private var data = Data()
-    private var isFinished = false
-
-    init(pipe: Pipe) {
-        handle = pipe.fileHandleForReading
-        handle.readabilityHandler = { [weak self] handle in
-            let chunk = handle.availableData
-            guard !chunk.isEmpty else {
-                handle.readabilityHandler = nil
-                return
-            }
-            self?.append(chunk)
-        }
-    }
-
-    func finish() -> Data {
-        lock.lock()
-        guard !isFinished else {
-            let result = data
-            lock.unlock()
-            return result
-        }
-        isFinished = true
-        lock.unlock()
-
-        handle.readabilityHandler = nil
-        append(handle.readDataToEndOfFile())
-
-        lock.lock()
-        defer { lock.unlock() }
-        return data
-    }
-
-    private func append(_ chunk: Data) {
-        lock.lock()
-        data.append(chunk)
-        lock.unlock()
     }
 }
 
