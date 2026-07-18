@@ -19,6 +19,7 @@ CHINESE_STRINGS_SOURCE="$ROOT_DIR/Restorix/Models/SimplifiedChineseStrings.swift
 MARKDOWN_RENDERER_SOURCE="$ROOT_DIR/Restorix/Services/MarkdownReportRenderer.swift"
 MARKDOWN_LOCALIZATION_SOURCE="$ROOT_DIR/Restorix/Services/MarkdownReportLocalization.swift"
 SMOKE_SOURCE="$ROOT_DIR/script/CLICommandRunnerSmoke.swift"
+SMOKE_SUPPORT_SOURCE="$ROOT_DIR/script/CLICommandRunnerSmokeSupport.swift"
 FIXTURE="$ROOT_DIR/script/fixtures/cli_command_fixture.sh"
 SMOKE_BINARY="$(mktemp "${TMPDIR:-/tmp}/restorix-cli-command-runner.XXXXXX")"
 
@@ -44,6 +45,7 @@ xcrun swiftc \
   "$CHINESE_STRINGS_SOURCE" \
   "$MARKDOWN_RENDERER_SOURCE" \
   "$MARKDOWN_LOCALIZATION_SOURCE" \
+  "$SMOKE_SUPPORT_SOURCE" \
   "$SMOKE_SOURCE" \
   -framework Security \
   -o "$SMOKE_BINARY"
