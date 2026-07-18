@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 struct DashboardView: View {
@@ -13,8 +12,8 @@ struct DashboardView: View {
                     ErrorBanner(message: error)
                 }
 
-                ForEach(app.scanResult?.errors ?? [], id: \.self) { error in
-                    ErrorBanner(message: error)
+                ForEach(app.scanResult?.errors ?? []) { error in
+                    ErrorBanner(message: error.localizedMessage(language: app.language))
                 }
 
                 if let summary = app.scanResult?.summary {
@@ -155,7 +154,7 @@ struct DashboardView: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(item.volume.name)
                                 .font(.body.weight(.medium))
-                            Text(item.reason)
+                            Text(item.reason.localizedMessage(language: app.language))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
@@ -170,7 +169,11 @@ struct DashboardView: View {
     }
 
     private func nextStepsSection(_ summary: ScanSummary) -> some View {
-        let steps = nextSteps(summary)
+        let steps = DashboardRecommendationBuilder.build(
+            summary: summary,
+            repositoriesEmpty: app.repositories.isEmpty,
+            text: app.text
+        )
         return VStack(alignment: .leading, spacing: 10) {
             if !steps.isEmpty {
                 Text(app.text(.nextSteps))
@@ -183,95 +186,11 @@ struct DashboardView: View {
                         actionTitle: step.actionTitle,
                         commandToCopy: step.commandToCopy
                     ) {
-                        perform(step.action)
+                        DashboardActionHandler.perform(step.action, app: app)
                     }
                 }
             }
         }
-    }
-
-    private func nextSteps(_ summary: ScanSummary) -> [NextStep] {
-        var steps: [NextStep] = []
-
-        if !summary.dockerRunning {
-            steps.append(NextStep(
-                title: app.text(.dockerStartTitle),
-                detail: app.text(.dockerStartDetail),
-                systemImage: "play.circle",
-                actionTitle: app.text(.openDocker),
-                action: .openDocker,
-                commandToCopy: nil
-            ))
-        }
-
-        if !summary.resticAvailable {
-            steps.append(NextStep(
-                title: app.text(.installResticTitle),
-                detail: app.text(.installResticDetail),
-                systemImage: "terminal",
-                actionTitle: app.text(.configureCLI),
-                action: .openSettings,
-                commandToCopy: "brew install restic"
-            ))
-        }
-
-        if app.repositories.isEmpty {
-            steps.append(NextStep(
-                title: app.text(.resticRepoAddTitle),
-                detail: app.text(.resticRepoAddDetail),
-                systemImage: "archivebox",
-                actionTitle: app.text(.addRepository),
-                action: .addRepository,
-                commandToCopy: "restorix repo add --tool restic --name \"Local Restic\" --location \"/path/to/repo\" --password-env-key RESTIC_PASSWORD"
-            ))
-        }
-
-        if summary.unknownCount > 0 && !app.repositories.isEmpty {
-            steps.append(NextStep(
-                title: app.text(.unknownReviewTitle),
-                detail: app.text(.unknownReviewDetail),
-                systemImage: "questionmark.circle",
-                actionTitle: app.text(.reviewVolumes),
-                action: .openVolumes,
-                commandToCopy: nil
-            ))
-        }
-
-        return steps
-    }
-
-    private func perform(_ action: NextStepAction?) {
-        switch action {
-        case .addRepository:
-            app.beginAddingRepository()
-        case .openSettings:
-            WindowManager.openSettings()
-        case .openVolumes:
-            app.selectedSidebarItem = .volumes
-        case .openDocker:
-            openDockerApp()
-        case .none:
-            break
-        }
-    }
-
-    private func openDockerApp() {
-        let bundleIdentifiers = [
-            "com.docker.docker",
-            "dev.orbstack.OrbStack"
-        ]
-
-        for bundleIdentifier in bundleIdentifiers {
-            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) else {
-                continue
-            }
-
-            let configuration = NSWorkspace.OpenConfiguration()
-            NSWorkspace.shared.openApplication(at: url, configuration: configuration)
-            return
-        }
-
-        WindowManager.openSettings()
     }
 
     private var warningsSection: some View {
@@ -280,8 +199,8 @@ struct DashboardView: View {
             if !warnings.isEmpty {
                 Text(app.text(.warnings))
                     .font(.headline)
-                ForEach(warnings, id: \.self) { warning in
-                    Text(warning)
+                ForEach(warnings) { warning in
+                    Text(warning.localizedMessage(language: app.language))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
@@ -289,21 +208,4 @@ struct DashboardView: View {
             }
         }
     }
-}
-
-private struct NextStep: Identifiable {
-    let id = UUID()
-    let title: String
-    let detail: String
-    let systemImage: String
-    let actionTitle: String?
-    let action: NextStepAction?
-    let commandToCopy: String?
-}
-
-private enum NextStepAction {
-    case addRepository
-    case openDocker
-    case openSettings
-    case openVolumes
 }

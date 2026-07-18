@@ -1,3 +1,4 @@
+use restorix_core::diagnostic::{Diagnostic, DiagnosticCode};
 use restorix_core::models::{
     BackupRepository, BackupTool, DockerVolume, HealthStatus, MatchConfidence, Platform,
     ScanResult, ScanSummary, VolumeHealth,
@@ -91,8 +92,10 @@ fn scan_result() -> ScanResult {
                     "RESTIC_REPOSITORY=\"/tmp/restic\" restic restore snap-1 --target ./restorix-restore-test --include \"/var/lib/docker/volumes/postgres_data/_data\""
                         .to_string(),
                 ),
-                reason: "No reliable snapshot path matched this Docker volume mountpoint."
-                    .to_string(),
+                reason: Diagnostic::simple(
+                    DiagnosticCode::NoSnapshotMatch,
+                    "No reliable snapshot path matched this Docker volume mountpoint.",
+                ),
             },
             VolumeHealth {
                 volume: unknown_volume,
@@ -103,7 +106,10 @@ fn scan_result() -> ScanResult {
                 last_backup_time: None,
                 backup_age_hours: None,
                 restore_command: None,
-                reason: "No enabled backup repositories are configured.".to_string(),
+                reason: Diagnostic::simple(
+                    DiagnosticCode::NoEnabledRepositories,
+                    "No enabled backup repositories are configured.",
+                ),
             },
             VolumeHealth {
                 volume: DockerVolume {
@@ -119,10 +125,16 @@ fn scan_result() -> ScanResult {
                 last_backup_time: None,
                 backup_age_hours: None,
                 restore_command: None,
-                reason: "Repository scan failed, so Restorix cannot determine backup health for this volume.".to_string(),
+                reason: Diagnostic::simple(
+                    DiagnosticCode::RepositoryScanFailed,
+                    "Repository scan failed, so Restorix cannot determine backup health for this volume.",
+                ),
             },
         ],
-        warnings: vec!["Loose matching is disabled.".to_string()],
+        warnings: vec![Diagnostic::simple(
+            DiagnosticCode::LooseMatchingDisabled,
+            "Loose matching is disabled.",
+        )],
         errors: Vec::new(),
     }
 }

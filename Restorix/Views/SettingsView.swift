@@ -90,20 +90,19 @@ struct SettingsView: View {
     }
 
     private func save() async {
-        let nextStaleHours = staleHours
-        let nextLooseMatching = looseMatching
-        let nextNotificationsEnabled = notificationsEnabled
-        let nextShowDockIcon = showDockIcon
-        let nextLaunchAtLogin = launchAtLogin
-        let nextCLIPath = cliPath
-
-        await app.setConfig(key: "stale_hours", value: String(nextStaleHours))
-        await app.setConfig(key: "loose_matching", value: nextLooseMatching ? "true" : "false")
-        await app.setConfig(key: "notifications_enabled", value: nextNotificationsEnabled ? "true" : "false")
-        await app.setConfig(key: "show_dock_icon", value: nextShowDockIcon ? "true" : "false")
-        await app.setLaunchAtLogin(nextLaunchAtLogin)
-        await app.setConfig(key: "cli_path", value: nextCLIPath)
-        syncFromSettings()
+        let saved = await app.commitSettings(
+            SettingsDraft(
+                staleHours: staleHours,
+                looseMatching: looseMatching,
+                showDockIcon: showDockIcon,
+                launchAtLogin: launchAtLogin,
+                notificationsEnabled: notificationsEnabled,
+                cliPath: cliPath
+            )
+        )
+        if saved {
+            syncFromSettings()
+        }
     }
 }
 

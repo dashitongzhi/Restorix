@@ -33,11 +33,10 @@ fn partial_source_failures_preserve_volumes_and_mark_health_unknown() {
     assert!(result
         .errors
         .iter()
-        .any(|error| error.contains("legacy could not be inspected")));
-    assert!(result
-        .errors
-        .iter()
-        .any(|error| error.contains("Local Restic: Configuration error: repository unavailable")));
+        .any(|error| error.message.contains("legacy could not be inspected")));
+    assert!(result.errors.iter().any(|error| error
+        .message
+        .contains("Local Restic: Configuration error: repository unavailable")));
     assert_eq!(result.volume_health[0].status, HealthStatus::Unknown);
     assert_eq!(result.summary.unknown_count, 1);
     assert_eq!(result.summary.error_count, 2);
@@ -56,11 +55,11 @@ fn missing_restic_is_a_hard_error_when_a_repository_is_enabled() {
     assert!(result
         .warnings
         .iter()
-        .any(|warning| warning.contains("Restic is not installed")));
+        .any(|warning| warning.message.contains("Restic is not installed")));
     assert!(result
         .errors
         .iter()
-        .any(|error| error.contains("Restic is required")));
+        .any(|error| error.message.contains("Restic is required")));
     assert_eq!(result.volume_health[0].status, HealthStatus::Unknown);
 }
 
@@ -78,10 +77,10 @@ fn config_failure_degrades_to_defaults_and_keeps_diagnostics() {
     assert!(result
         .errors
         .iter()
-        .any(|error| error.contains("invalid configuration")));
+        .any(|error| error.message.contains("invalid configuration")));
     assert!(result
         .errors
         .iter()
-        .any(|error| error.contains("Docker is not installed")));
+        .any(|error| error.message.contains("Docker is not installed")));
     assert_eq!(result.summary.error_count, 2);
 }

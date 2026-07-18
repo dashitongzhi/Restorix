@@ -110,7 +110,7 @@ struct VolumeListView: View {
             item.volume.name,
             item.volume.mountpoint,
             app.repositoryDisplayName(for: item.matchedRepositoryId),
-            item.reason,
+            item.reason.localizedMessage(language: app.language),
             item.lastBackupTime ?? ""
         ]
         .contains { $0.lowercased().contains(query) }

@@ -75,7 +75,7 @@ struct CLICommandRunnerSmoke {
         let bridge = CoreBridge(cliURL: fixtureURL)
         let scan = try await bridge.scan()
         try require(scan.summary.errorCount == 1, "bridge preserves scan summary")
-        try require(scan.errors == ["docker unavailable"], "bridge accepts scan exit code 2")
+        try require(scan.errors.map(\.message) == ["docker unavailable"], "bridge accepts scan exit code 2")
 
         let report = try await bridge.exportMarkdownReport()
         try require(report.contains("## Errors"), "bridge accepts report exit code 2")

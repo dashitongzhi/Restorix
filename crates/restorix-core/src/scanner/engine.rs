@@ -1,3 +1,4 @@
+use crate::diagnostic::{Diagnostic, DiagnosticCode};
 use crate::docker::client::DockerClient;
 use crate::models::{HealthStatus, Platform, ScanResult, ScanSummary, VolumeHealth};
 use crate::restic::client::ResticClient;
@@ -26,7 +27,12 @@ fn scan_with_sources(
     let config = match config_source.load_config() {
         Ok(config) => config,
         Err(error) => {
-            errors.push(error.to_string());
+            let detail = error.to_string();
+            errors.push(Diagnostic::with_detail(
+                DiagnosticCode::ConfigLoadFailed,
+                detail.clone(),
+                detail,
+            ));
             Default::default()
         }
     };
@@ -35,17 +41,30 @@ fn scan_with_sources(
     let restic_status = backup.status();
 
     if let Some(message) = &docker_status.message {
-        errors.push(message.clone());
+        errors.push(Diagnostic::with_detail(
+            DiagnosticCode::DockerUnavailable,
+            message.clone(),
+            message.clone(),
+        ));
     }
     if let Some(message) = &restic_status.message {
-        warnings.push(message.clone());
+        warnings.push(Diagnostic::with_detail(
+            DiagnosticCode::ResticUnavailable,
+            message.clone(),
+            message.clone(),
+        ));
     }
 
     let containers = if docker_status.running {
         match docker.containers() {
             Ok(containers) => containers,
             Err(error) => {
-                errors.push(error.to_string());
+                let detail = error.to_string();
+                errors.push(Diagnostic::with_detail(
+                    DiagnosticCode::DockerContainerScanFailed,
+                    detail.clone(),
+                    detail,
+                ));
                 Vec::new()
             }
         }
@@ -56,11 +75,22 @@ fn scan_with_sources(
     let volumes = if docker_status.running {
         match docker.volumes() {
             Ok(scan) => {
-                errors.extend(scan.errors);
+                errors.extend(scan.errors.into_iter().map(|message| {
+                    Diagnostic::with_detail(
+                        DiagnosticCode::DockerVolumeInspectFailed,
+                        message.clone(),
+                        message,
+                    )
+                }));
                 scan.volumes
             }
             Err(error) => {
-                errors.push(error.to_string());
+                let detail = error.to_string();
+                errors.push(Diagnostic::with_detail(
+                    DiagnosticCode::DockerVolumeScanFailed,
+                    detail.clone(),
+                    detail,
+                ));
                 Vec::new()
             }
         }
@@ -80,16 +110,22 @@ fn scan_with_sources(
                 Ok(mut repo_snapshots) => snapshots.append(&mut repo_snapshots),
                 Err(error) => {
                     repository_scan_failed = true;
-                    errors.push(format!("{}: {}", repo.name, error));
+                    let detail = error.to_string();
+                    errors.push(Diagnostic::with_repository(
+                        DiagnosticCode::RepositoryScanFailed,
+                        format!("{}: {}", repo.name, detail),
+                        repo.name.clone(),
+                        detail,
+                    ));
                 }
             }
         }
     } else if repositories.iter().any(|repo| repo.enabled) {
         repository_scan_failed = true;
-        errors.push(
-            "Restic is required by at least one enabled repository but is not installed."
-                .to_string(),
-        );
+        errors.push(Diagnostic::simple(
+            DiagnosticCode::ResticRequiredMissing,
+            "Restic is required by at least one enabled repository but is not installed.",
+        ));
     }
 
     let mut volume_health = calculate_volume_health(
@@ -160,15 +196,15 @@ fn build_summary(input: ScanSummaryInput<'_>) -> ScanSummary {
 }
 
 fn add_context_warnings(
-    warnings: &mut Vec<String>,
+    warnings: &mut Vec<Diagnostic>,
     volumes: &[crate::models::DockerVolume],
     repositories: &[crate::models::BackupRepository],
 ) {
     if !volumes.is_empty() && repositories.iter().all(|repo| !repo.enabled) {
-        warnings.push(
-            "No enabled backup repositories are configured, so Restorix can list Docker volumes but cannot verify backups."
-                .to_string(),
-        );
+        warnings.push(Diagnostic::simple(
+            DiagnosticCode::BackupVerificationUnconfigured,
+            "No enabled backup repositories are configured, so Restorix can list Docker volumes but cannot verify backups.",
+        ));
     }
 
     let stateful_names = volumes
@@ -178,9 +214,13 @@ fn add_context_warnings(
         .collect::<Vec<_>>();
 
     if !stateful_names.is_empty() {
-        warnings.push(format!(
-            "These volumes look stateful or database-backed: {}. File-level snapshots may still need app-aware dumps or a stopped container for consistent restores.",
-            stateful_names.join(", ")
+        warnings.push(Diagnostic::with_volumes(
+            DiagnosticCode::StatefulVolumes,
+            format!(
+                "These volumes look stateful or database-backed: {}. File-level snapshots may still need app-aware dumps or a stopped container for consistent restores.",
+                stateful_names.join(", ")
+            ),
+            stateful_names,
         ));
     }
 }

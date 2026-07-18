@@ -43,8 +43,8 @@ final class MenuBarController: NSObject {
         button.imagePosition = .imageLeft
         button.imageScaling = .scaleProportionallyDown
         button.contentTintColor = nil
-        button.toolTip = tooltip
-        button.setAccessibilityLabel(statusBarTitle)
+        button.toolTip = presentation.tooltip
+        button.setAccessibilityLabel(presentation.statusBarTitle)
         statusItem.length = NSStatusItem.squareLength
         statusItem.isVisible = true
     }
@@ -62,12 +62,10 @@ final class MenuBarController: NSObject {
 
     private func rebuildMenu() {
         let menu = NSMenu()
-        let summary = appViewModel?.scanResult?.summary
-
         menu.addItem(disabledTitle("Restorix"))
-        menu.addItem(disabledTitle(overallLine))
-        menu.addItem(disabledTitle(statusLine(summary)))
-        menu.addItem(disabledTitle(lastScanLine(summary)))
+        menu.addItem(disabledTitle(presentation.overallLine))
+        menu.addItem(disabledTitle(presentation.statusLine))
+        menu.addItem(disabledTitle(presentation.lastScanLine))
         addRiskPreview(to: menu)
         menu.addItem(.separator())
         menu.addItem(actionItem(text(.openDashboard), #selector(openDashboard)))
@@ -84,41 +82,13 @@ final class MenuBarController: NSObject {
         statusItem.menu = menu
     }
 
-    private var statusBarTitle: String {
-        guard let summary = appViewModel?.scanResult?.summary else {
-            return appViewModel?.isScanning == true ? "Restorix ..." : "Restorix"
-        }
-
-        if summary.errorCount > 0 || summary.unprotectedCount > 0 {
-            return "Restorix \(summary.unprotectedCount + summary.errorCount)!"
-        }
-
-        if summary.staleCount > 0 {
-            return "Restorix \(summary.staleCount)"
-        }
-
-        if summary.unknownCount > 0 {
-            return "Restorix \(summary.unknownCount)?"
-        }
-
-        return "Restorix OK"
-    }
-
-    private func statusLine(_ summary: ScanSummary?) -> String {
-        guard let summary else { return text(.statusNotScanned) }
-        return "\(text(.statusLine)): \(summary.protectedCount) \(text(.protected)), \(summary.unprotectedCount) \(text(.unprotected)), \(summary.staleCount) \(text(.stale)), \(summary.unknownCount) \(text(.unknown))"
-    }
-
     private func addRiskPreview(to menu: NSMenu) {
-        guard let items = appViewModel?.scanResult?.volumeHealth.filter({
-            $0.status == .Unprotected || $0.status == .Stale || $0.status == .Unknown || $0.status == .Error
-        }), !items.isEmpty else {
-            return
-        }
+        let items = presentation.riskyVolumes
+        guard !items.isEmpty else { return }
 
         menu.addItem(.separator())
         for item in items.prefix(4) {
-            menu.addItem(disabledTitle("• \(item.volume.name): \(statusText(item.status))"))
+            menu.addItem(disabledTitle("• \(item.volume.name): \(presentation.statusText(item.status))"))
         }
 
         if items.count > 4 {
@@ -126,49 +96,16 @@ final class MenuBarController: NSObject {
         }
     }
 
-    private func lastScanLine(_ summary: ScanSummary?) -> String {
-        guard let summary else { return "\(text(.lastScan)): \(text(.never))" }
-        return "\(text(.lastScan)): \(relativeDate(summary.scannedAt))"
-    }
-
-    private var overallLine: String {
-        guard let status = appViewModel?.overallStatus else { return text(.healthUnknown) }
-        switch status {
-        case .Protected:
-            return text(.healthAllProtected)
-        case .Stale:
-            return text(.healthNeedsReview)
-        case .Unprotected, .Error:
-            return text(.healthAtRisk)
-        case .Unknown:
-            return text(.healthUnknown)
-        }
-    }
-
-    private var tooltip: String {
-        guard let summary = appViewModel?.scanResult?.summary else {
-            return text(.statusNotScanned)
-        }
-        return "\(overallLine) - \(summary.totalVolumes) \(text(.volumes))"
-    }
-
     private func text(_ key: L10nKey) -> String {
         appViewModel?.text(key) ?? AppStrings.text(key, language: .english)
     }
 
-    private func statusText(_ status: HealthStatus) -> String {
-        switch status {
-        case .Protected:
-            return text(.protected)
-        case .Unprotected:
-            return text(.unprotected)
-        case .Stale:
-            return text(.stale)
-        case .Unknown:
-            return text(.unknown)
-        case .Error:
-            return text(.error)
-        }
+    private var presentation: MenuBarPresentation {
+        MenuBarPresentation(
+            result: appViewModel?.scanResult,
+            isScanning: appViewModel?.isScanning == true,
+            language: appViewModel?.language ?? .english
+        )
     }
 
     private func disabledTitle(_ title: String) -> NSMenuItem {
@@ -182,18 +119,6 @@ final class MenuBarController: NSObject {
         item.target = self
         item.isEnabled = enabled
         return item
-    }
-
-    private func relativeDate(_ value: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
-        let date = formatter.date(from: value) ?? ISO8601DateFormatter().date(from: value)
-        guard let date else { return value }
-
-        let relative = RelativeDateTimeFormatter()
-        relative.unitsStyle = .short
-        return relative.localizedString(for: date, relativeTo: Date())
     }
 
     @objc private func openDashboard() {

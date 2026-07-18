@@ -1,8 +1,7 @@
 use anyhow::Result;
 use clap::{ArgAction, Args, Parser, Subcommand};
 use restorix_core::commands;
-use restorix_core::report::markdown::{render_markdown_report_with_language, ReportLanguage};
-use restorix_core::storage::config::ConfigStore;
+use restorix_core::storage::config::{ConfigStore, SettingsDraft};
 
 #[derive(Debug, Parser)]
 #[command(name = "restorix")]
@@ -93,21 +92,27 @@ struct ReportMarkdownArgs {
 #[derive(Debug, Subcommand)]
 enum ConfigCommand {
     Get(JsonFlag),
-    Set { key: String, value: String },
+    Commit { payload: String },
 }
 
 fn main() -> Result<()> {
+    let exit_code = run()?;
+    if exit_code != 0 {
+        std::process::exit(exit_code);
+    }
+    Ok(())
+}
+
+fn run() -> Result<i32> {
     let cli = Cli::parse();
     let config_store = ConfigStore::from_default_path()?;
+    let mut exit_code = 0;
 
     match cli.command {
         Command::Scan(_) => {
-            let result = commands::scan_json(&config_store);
-            let has_errors = !result.errors.is_empty();
-            print_json(&result)?;
-            if has_errors {
-                std::process::exit(2);
-            }
+            let output = commands::scan_result(&config_store);
+            print_json(&output.value)?;
+            exit_code = output.exit_code;
         }
         Command::Docker { command } => match command {
             DockerCommand::Check(_) => print_json(&commands::docker_check_json())?,
@@ -152,28 +157,21 @@ fn main() -> Result<()> {
         },
         Command::Report { command } => match command {
             ReportCommand::Markdown(args) => {
-                let result = commands::scan_json(&config_store);
-                print!(
-                    "{}",
-                    render_markdown_report_with_language(
-                        &result,
-                        ReportLanguage::from_code(&args.language)
-                    )
-                );
-                if !result.errors.is_empty() {
-                    std::process::exit(2);
-                }
+                let output = commands::markdown_report(&config_store, &args.language);
+                print!("{}", output.value);
+                exit_code = output.exit_code;
             }
         },
         Command::Config { command } => match command {
             ConfigCommand::Get(_) => print_json(&commands::get_config(&config_store)?)?,
-            ConfigCommand::Set { key, value } => {
-                print_json(&commands::set_config(&config_store, &key, &value)?)?
+            ConfigCommand::Commit { payload } => {
+                let draft = serde_json::from_str::<SettingsDraft>(&payload)?;
+                print_json(&commands::commit_settings(&config_store, draft)?)?
             }
         },
     }
 
-    Ok(())
+    Ok(exit_code)
 }
 
 fn print_json<T: serde::Serialize>(value: &T) -> Result<()> {

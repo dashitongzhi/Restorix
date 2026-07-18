@@ -19,7 +19,7 @@ struct VolumeDetailView: View {
                 HealthBadge(status: item.status)
             }
 
-            Text(item.reason)
+            Text(item.reason.localizedMessage(language: app.language))
                 .font(.callout)
                 .foregroundStyle(.secondary)
 

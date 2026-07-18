@@ -4,7 +4,7 @@ use serde::Deserialize;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
-pub struct DockerContainerRow {
+pub(crate) struct DockerContainerRow {
     pub id: String,
     pub name: String,
     pub image: String,
@@ -12,7 +12,7 @@ pub struct DockerContainerRow {
 }
 
 #[derive(Debug, Clone)]
-pub struct DockerVolumeRow {
+pub(crate) struct DockerVolumeRow {
     pub name: String,
 }
 
@@ -66,7 +66,7 @@ struct DockerInspectVolume {
     labels: Option<BTreeMap<String, String>>,
 }
 
-pub fn parse_container_rows(input: &str) -> Result<Vec<DockerContainerRow>> {
+pub(crate) fn parse_container_rows(input: &str) -> Result<Vec<DockerContainerRow>> {
     input
         .lines()
         .filter(|line| !line.trim().is_empty())
@@ -86,7 +86,7 @@ pub fn parse_container_rows(input: &str) -> Result<Vec<DockerContainerRow>> {
         .collect()
 }
 
-pub fn parse_volume_rows(input: &str) -> Result<Vec<DockerVolumeRow>> {
+pub(crate) fn parse_volume_rows(input: &str) -> Result<Vec<DockerVolumeRow>> {
     input
         .lines()
         .filter(|line| !line.trim().is_empty())
@@ -101,7 +101,7 @@ pub fn parse_volume_rows(input: &str) -> Result<Vec<DockerVolumeRow>> {
         .collect()
 }
 
-pub fn parse_container_inspect(input: &str) -> Result<Vec<DockerVolumeMount>> {
+pub(crate) fn parse_container_inspect(input: &str) -> Result<Vec<DockerVolumeMount>> {
     let containers: Vec<DockerInspectContainer> =
         serde_json::from_str(input).map_err(|source| RestorixError::JsonParse {
             context: "docker inspect container".to_string(),
@@ -121,7 +121,7 @@ pub fn parse_container_inspect(input: &str) -> Result<Vec<DockerVolumeMount>> {
         .collect())
 }
 
-pub fn parse_volume_inspect(input: &str) -> Result<DockerVolume> {
+pub(crate) fn parse_volume_inspect(input: &str) -> Result<DockerVolume> {
     let mut volumes: Vec<DockerInspectVolume> =
         serde_json::from_str(input).map_err(|source| RestorixError::JsonParse {
             context: "docker volume inspect".to_string(),
@@ -142,4 +142,55 @@ pub fn parse_volume_inspect(input: &str) -> Result<DockerVolume> {
         mountpoint: volume.mountpoint,
         labels,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_docker_ps_json_lines() {
+        let rows =
+            parse_container_rows(include_str!("../../tests/fixtures/docker_ps.jsonl")).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].id, "abc123");
+        assert_eq!(rows[0].name, "postgres");
+        assert_eq!(rows[1].status, "Exited (0) 1 hour ago");
+    }
+
+    #[test]
+    fn parses_docker_volume_ls_json_lines() {
+        let rows =
+            parse_volume_rows(include_str!("../../tests/fixtures/docker_volume_ls.jsonl")).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].name, "postgres_data");
+    }
+
+    #[test]
+    fn parses_docker_container_mounts() {
+        let mounts = parse_container_inspect(include_str!(
+            "../../tests/fixtures/docker_container_inspect.json"
+        ))
+        .unwrap();
+        assert_eq!(mounts.len(), 1);
+        assert_eq!(mounts[0].volume_name.as_deref(), Some("postgres_data"));
+        assert_eq!(mounts[0].destination, "/var/lib/postgresql/data");
+    }
+
+    #[test]
+    fn parses_docker_volume_inspect() {
+        let volume = parse_volume_inspect(include_str!(
+            "../../tests/fixtures/docker_volume_inspect.json"
+        ))
+        .unwrap();
+        assert_eq!(volume.name, "postgres_data");
+        assert_eq!(
+            volume.mountpoint,
+            "/var/lib/docker/volumes/postgres_data/_data"
+        );
+        assert_eq!(
+            volume.labels[0],
+            ("com.example.service".to_string(), "postgres".to_string())
+        );
+    }
 }

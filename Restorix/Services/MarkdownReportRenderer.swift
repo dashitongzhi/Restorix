@@ -54,8 +54,18 @@ enum MarkdownReportRenderer {
             lines: &lines
         )
         appendRestoreCommands(result.volumeHealth, language: language, lines: &lines)
-        appendMessages(title: label(.warnings, language), messages: result.warnings, lines: &lines)
-        appendMessages(title: label(.errors, language), messages: result.errors, lines: &lines)
+        appendMessages(
+            title: label(.warnings, language),
+            messages: result.warnings,
+            language: language,
+            lines: &lines
+        )
+        appendMessages(
+            title: label(.errors, language),
+            messages: result.errors,
+            language: language,
+            lines: &lines
+        )
 
         return lines.joined(separator: "\n") + "\n"
     }
@@ -73,7 +83,7 @@ enum MarkdownReportRenderer {
         lines.append("|---|---|---|---|---|")
         for item in items {
             lines.append(
-                "| \(escape(item.volume.name)) | \(statusText(item.status, language)) | \(escape(item.lastBackupTime ?? label(.never, language))) | \(escape(repositoryName(item.matchedRepositoryId))) | \(escape(item.reason)) |"
+                "| \(escape(item.volume.name)) | \(statusText(item.status, language)) | \(escape(item.lastBackupTime ?? label(.never, language))) | \(escape(repositoryName(item.matchedRepositoryId))) | \(escape(item.reason.localizedMessage(language: language))) |"
             )
         }
         lines.append("")
@@ -96,11 +106,16 @@ enum MarkdownReportRenderer {
         lines.append("")
     }
 
-    private static func appendMessages(title: String, messages: [String], lines: inout [String]) {
+    private static func appendMessages(
+        title: String,
+        messages: [Diagnostic],
+        language: AppLanguage,
+        lines: inout [String]
+    ) {
         guard !messages.isEmpty else { return }
         lines.append("## \(title)")
         for message in messages {
-            lines.append("- \(message)")
+            lines.append("- \(message.localizedMessage(language: language))")
         }
         lines.append("")
     }

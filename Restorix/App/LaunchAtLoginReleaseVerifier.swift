@@ -41,8 +41,15 @@ enum LaunchAtLoginReleaseVerifier {
     }
 
     private static func setLaunchAtLogin(_ enabled: Bool, appViewModel: AppViewModel) async throws {
-        try appViewModel.applyLaunchAtLoginPreference(enabled)
         try await loadConfig(appViewModel)
+        guard let settings = appViewModel.settings else {
+            throw VerificationError.missingSettings
+        }
+        var draft = SettingsDraft(settings: settings)
+        draft.launchAtLogin = enabled
+        guard await appViewModel.commitSettings(draft) else {
+            throw VerificationError.appError(appViewModel.lastError ?? "Settings commit failed")
+        }
     }
 
     private static func loadConfig(_ appViewModel: AppViewModel) async throws {

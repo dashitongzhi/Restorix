@@ -1,2 +1,2 @@
 pub mod client;
-pub mod parser;
+pub(crate) mod parser;

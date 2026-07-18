@@ -6,19 +6,31 @@ use crate::models::{
 use crate::report::markdown::{render_markdown_report_with_language, ReportLanguage};
 use crate::restic::client::ResticClient;
 use crate::scanner::engine::scan;
-use crate::storage::config::{AppConfig, ConfigStore};
+use crate::storage::config::{AppConfig, ConfigStore, SettingsDraft};
 
-pub fn scan_json(config_store: &ConfigStore) -> ScanResult {
-    scan(config_store)
+pub struct CommandOutput<T> {
+    pub value: T,
+    pub exit_code: i32,
 }
 
-pub fn markdown_report(config_store: &ConfigStore) -> String {
-    markdown_report_with_language(config_store, "en")
-}
-
-pub fn markdown_report_with_language(config_store: &ConfigStore, language: &str) -> String {
+pub fn scan_result(config_store: &ConfigStore) -> CommandOutput<ScanResult> {
     let result = scan(config_store);
-    render_markdown_report_with_language(&result, ReportLanguage::from_code(language))
+    let exit_code = if result.errors.is_empty() { 0 } else { 2 };
+    CommandOutput {
+        value: result,
+        exit_code,
+    }
+}
+
+pub fn markdown_report(config_store: &ConfigStore, language: &str) -> CommandOutput<String> {
+    let scan = scan_result(config_store);
+    CommandOutput {
+        value: render_markdown_report_with_language(
+            &scan.value,
+            ReportLanguage::from_code(language),
+        ),
+        exit_code: scan.exit_code,
+    }
 }
 
 pub fn docker_check_json() -> serde_json::Value {
@@ -89,8 +101,8 @@ pub fn get_config(config_store: &ConfigStore) -> Result<AppConfig> {
     config_store.load()
 }
 
-pub fn set_config(config_store: &ConfigStore, key: &str, value: &str) -> Result<AppConfig> {
-    config_store.set_value(key, value)
+pub fn commit_settings(config_store: &ConfigStore, draft: SettingsDraft) -> Result<AppConfig> {
+    config_store.commit_settings(draft)
 }
 
 fn parse_tool(tool: &str) -> Result<BackupTool> {

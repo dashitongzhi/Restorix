@@ -1,4 +1,5 @@
-use super::localization::{label, localized_message, Label, ReportLanguage};
+use super::localization::{label, localized_diagnostic, Label, ReportLanguage};
+use crate::diagnostic::Diagnostic;
 use crate::models::{HealthStatus, VolumeHealth};
 
 pub(super) fn render_errors(
@@ -35,7 +36,7 @@ pub(super) fn render_errors(
                 "| {} | {} | {} |",
                 escape_table(&item.volume.name),
                 escape_table(&item.volume.mountpoint),
-                escape_table(&localized_message(language, &item.reason))
+                escape_table(&localized_diagnostic(language, &item.reason))
             ),
         );
     }
@@ -76,7 +77,7 @@ pub(super) fn render_unknown(
                 "| {} | {} | {} |",
                 escape_table(&item.volume.name),
                 escape_table(&item.volume.mountpoint),
-                escape_table(&localized_message(language, &item.reason))
+                escape_table(&localized_diagnostic(language, &item.reason))
             ),
         );
     }
@@ -117,7 +118,7 @@ pub(super) fn render_unprotected(
                 "| {} | {} | {} |",
                 escape_table(&item.volume.name),
                 escape_table(&item.volume.mountpoint),
-                escape_table(&localized_message(language, &item.reason))
+                escape_table(&localized_diagnostic(language, &item.reason))
             ),
         );
     }
@@ -160,7 +161,7 @@ pub(super) fn render_stale(report: &mut String, health: &[VolumeHealth], languag
                         .unwrap_or(label(language, Label::Unknown)),
                 ),
                 item.backup_age_hours.unwrap_or_default(),
-                escape_table(&localized_message(language, &item.reason))
+                escape_table(&localized_diagnostic(language, &item.reason))
             ),
         );
     }
@@ -245,7 +246,7 @@ pub(super) fn render_restore_commands(
 pub(super) fn render_messages(
     report: &mut String,
     title: Label,
-    messages: &[String],
+    messages: &[Diagnostic],
     language: ReportLanguage,
 ) {
     if messages.is_empty() {
@@ -256,7 +257,7 @@ pub(super) fn render_messages(
     for message in messages {
         push_line(
             report,
-            &format!("- {}", localized_message(language, message)),
+            &format!("- {}", localized_diagnostic(language, message)),
         );
     }
     push_line(report, "");

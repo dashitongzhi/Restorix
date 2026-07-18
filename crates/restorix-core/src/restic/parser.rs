@@ -14,7 +14,10 @@ struct ResticSnapshotRow {
     tags: Vec<String>,
 }
 
-pub fn parse_snapshots(input: &str, repository: &BackupRepository) -> Result<Vec<BackupSnapshot>> {
+pub(crate) fn parse_snapshots(
+    input: &str,
+    repository: &BackupRepository,
+) -> Result<Vec<BackupSnapshot>> {
     let rows: Vec<ResticSnapshotRow> =
         serde_json::from_str(input).map_err(|source| RestorixError::JsonParse {
             context: "restic snapshots --json".to_string(),
@@ -37,4 +40,37 @@ pub fn parse_snapshots(input: &str, repository: &BackupRepository) -> Result<Vec
             tags: row.tags,
         })
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_restic_snapshots() {
+        let repo = fixture_repo();
+        let snapshots = parse_snapshots(
+            include_str!("../../tests/fixtures/restic_snapshots.json"),
+            &repo,
+        )
+        .unwrap();
+        assert_eq!(snapshots.len(), 2);
+        assert_eq!(snapshots[0].id, "abc123snapshot");
+        assert_eq!(snapshots[0].repository_id, "repo-1");
+        assert_eq!(snapshots[0].tags, vec!["docker"]);
+    }
+
+    fn fixture_repo() -> BackupRepository {
+        BackupRepository {
+            id: "repo-1".to_string(),
+            name: "Local Restic".to_string(),
+            tool: BackupTool::Restic,
+            location: "/tmp/restic".to_string(),
+            password_env_key: Some("RESTIC_PASSWORD".to_string()),
+            expected_hostname: Some("homelab".to_string()),
+            enabled: true,
+            created_at: "2026-05-15T00:00:00Z".to_string(),
+            updated_at: "2026-05-15T00:00:00Z".to_string(),
+        }
+    }
 }

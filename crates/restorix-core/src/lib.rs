@@ -1,4 +1,5 @@
 pub mod commands;
+pub mod diagnostic;
 pub mod docker;
 pub mod error;
 pub mod models;

@@ -153,7 +153,7 @@ cargo run -p restorix-cli -- report markdown --language zh-Hans
 | `restorix scan --json` | 生成完整健康模型。 |
 | `restorix report markdown --language en` | 导出 Markdown 报告。 |
 | `restorix config get --json` | 读取本地设置。 |
-| `restorix config set <key> <value>` | 更新本地设置。 |
+| `restorix config commit '<json>'` | 校验并在一次事务中更新全部本地设置。 |
 
 ## macOS 应用
 

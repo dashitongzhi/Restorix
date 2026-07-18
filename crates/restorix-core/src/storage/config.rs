@@ -22,6 +22,40 @@ pub struct AppConfig {
     pub repositories: Vec<BackupRepository>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SettingsDraft {
+    pub stale_hours: u64,
+    pub loose_matching: bool,
+    pub show_dock_icon: bool,
+    pub launch_at_login: bool,
+    pub notifications_enabled: bool,
+    pub cli_path: String,
+}
+
+impl SettingsDraft {
+    fn validate(&self) -> Result<()> {
+        if !(1..=720).contains(&self.stale_hours) {
+            return Err(RestorixError::Config(
+                "stale_hours must be between 1 and 720.".to_string(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl From<&AppConfig> for SettingsDraft {
+    fn from(config: &AppConfig) -> Self {
+        Self {
+            stale_hours: config.stale_hours,
+            loose_matching: config.loose_matching,
+            show_dock_icon: config.show_dock_icon,
+            launch_at_login: config.launch_at_login,
+            notifications_enabled: config.notifications_enabled,
+            cli_path: config.cli_path.clone(),
+        }
+    }
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
@@ -155,35 +189,15 @@ impl ConfigStore {
         })
     }
 
-    pub fn set_value(&self, key: &str, value: &str) -> Result<AppConfig> {
+    pub fn commit_settings(&self, draft: SettingsDraft) -> Result<AppConfig> {
+        draft.validate()?;
         self.update(|config| {
-            match key {
-                "stale_hours" => {
-                    config.stale_hours = value.parse::<u64>().map_err(|_| {
-                        RestorixError::Config("stale_hours must be an integer.".to_string())
-                    })?;
-                }
-                "loose_matching" => {
-                    config.loose_matching = parse_bool(value)?;
-                }
-                "show_dock_icon" => {
-                    config.show_dock_icon = parse_bool(value)?;
-                }
-                "launch_at_login" => {
-                    config.launch_at_login = parse_bool(value)?;
-                }
-                "notifications_enabled" => {
-                    config.notifications_enabled = parse_bool(value)?;
-                }
-                "cli_path" => {
-                    config.cli_path = value.to_string();
-                }
-                other => {
-                    return Err(RestorixError::Config(format!(
-                        "Unknown config key: {other}"
-                    )));
-                }
-            }
+            config.stale_hours = draft.stale_hours;
+            config.loose_matching = draft.loose_matching;
+            config.show_dock_icon = draft.show_dock_icon;
+            config.launch_at_login = draft.launch_at_login;
+            config.notifications_enabled = draft.notifications_enabled;
+            config.cli_path = draft.cli_path;
             Ok(config.clone())
         })
     }
@@ -264,15 +278,5 @@ impl ConfigStore {
         let backup_name = format!("{file_name}.broken-{timestamp}");
         let backup_path = self.path.with_file_name(backup_name);
         self.write_atomically(&backup_path, data.as_bytes())
-    }
-}
-
-fn parse_bool(value: &str) -> Result<bool> {
-    match value {
-        "true" | "1" | "yes" | "on" => Ok(true),
-        "false" | "0" | "no" | "off" => Ok(false),
-        _ => Err(RestorixError::Config(
-            "Boolean value must be true or false.".to_string(),
-        )),
     }
 }

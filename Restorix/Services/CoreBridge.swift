@@ -1,17 +1,30 @@
 import Foundation
 
-final class CoreBridge {
+protocol CoreBridging: SettingsCoreBridging {
+    func scan() async throws -> ScanResult
+    func listRepositories() async throws -> [BackupRepository]
+    func removeRepository(id: String) async throws -> Bool
+    func setRepositoryEnabled(id: String, enabled: Bool) async throws -> BackupRepository
+    func testRepository(id: String) async throws -> [BackupSnapshot]
+    func addRepository(name: String, location: String, passwordEnvKey: String?, password: String?, expectedHostname: String, enabled: Bool) async throws -> BackupRepository
+    func exportMarkdownReport(language: AppLanguage) async throws -> String
+}
+
+final class CoreBridge: CoreBridging {
     private let cliLocator: CLIExecutableLocator
     private let commandRunner: any CLICommandRunning
+    private let credentialStore: any CredentialStoring
     private let scanTimeoutSeconds: TimeInterval = 600
     private let defaultCommandTimeoutSeconds: TimeInterval = 60
 
     init(
         cliURL: URL? = nil,
-        commandRunner: any CLICommandRunning = CLICommandRunner()
+        commandRunner: any CLICommandRunning = CLICommandRunner(),
+        credentialStore: any CredentialStoring = KeychainCredentialStore()
     ) {
         self.cliLocator = CLIExecutableLocator(overrideURL: cliURL)
         self.commandRunner = commandRunner
+        self.credentialStore = credentialStore
     }
 
     func resolvedCLIURLForVerification() -> URL {
@@ -72,7 +85,7 @@ final class CoreBridge {
         let repository = try JSONDecoder.restorix.decode(BackupRepository.self, from: data)
         if let password, let passwordEnvKey, !password.isEmpty {
             do {
-                try KeychainCredentialStore.save(password, for: passwordEnvKey)
+                try credentialStore.save(password, for: passwordEnvKey)
             } catch {
                 _ = try? await removeRepository(id: repository.id)
                 throw error
@@ -95,8 +108,12 @@ final class CoreBridge {
         return try JSONDecoder.restorix.decode(AppSettings.self, from: data)
     }
 
-    func setConfig(key: String, value: String) async throws -> AppSettings {
-        let data = try await run(arguments: ["config", "set", key, value])
+    func commitSettings(_ draft: SettingsDraft) async throws -> AppSettings {
+        let payload = try String(
+            decoding: JSONEncoder().encode(draft),
+            as: UTF8.self
+        )
+        let data = try await run(arguments: ["config", "commit", payload])
         return try JSONDecoder.restorix.decode(AppSettings.self, from: data)
     }
 
@@ -119,7 +136,7 @@ final class CoreBridge {
     private func credentials(for repositories: [BackupRepository]) throws -> [String: String] {
         var credentials: [String: String] = [:]
         for key in Set(repositories.compactMap(\.passwordEnvKey)) {
-            guard let password = try KeychainCredentialStore.password(for: key) else {
+            guard let password = try credentialStore.password(for: key) else {
                 throw CoreBridgeError.missingKeychainCredential(key)
             }
             credentials[key] = password

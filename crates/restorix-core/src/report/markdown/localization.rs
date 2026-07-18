@@ -22,76 +22,44 @@ pub(super) fn yes_no(language: ReportLanguage, value: bool) -> &'static str {
     }
 }
 
-pub(super) fn localized_message(language: ReportLanguage, value: &str) -> String {
+pub(super) fn localized_diagnostic(language: ReportLanguage, diagnostic: &Diagnostic) -> String {
     if language == ReportLanguage::English {
-        return value.to_string();
+        return diagnostic.message.clone();
     }
 
-    match value {
-        "Docker metadata is incomplete: volume mountpoint is empty." => {
-            "Docker 元数据不完整：volume 挂载路径为空。".to_string()
-        }
-        "No enabled backup repositories are configured." => {
-            "还没有配置已启用的备份仓库。".to_string()
-        }
-        "No reliable snapshot path matched this Docker volume mountpoint." => {
-            "没有可靠的 snapshot 路径匹配这个 Docker volume 挂载点。".to_string()
-        }
-        "Only a volume-name match was found. Enable loose matching to treat this as protected." => {
-            "只找到了 volume 名称匹配。启用宽松匹配后才会把它视为已保护。".to_string()
-        }
-        "A recent restic snapshot matches this Docker volume mountpoint." => {
-            "最近的 restic snapshot 匹配这个 Docker volume 挂载点。".to_string()
-        }
-        "A matching snapshot was found, but its timestamp could not be parsed." => {
-            "找到了匹配的 snapshot，但无法解析它的时间戳。".to_string()
-        }
-        "A matching snapshot has a future timestamp, so backup freshness is unknown." => {
-            "匹配的 snapshot 时间戳在未来，因此无法判断备份是否新鲜。".to_string()
-        }
-        "At least one repository scan failed, so Restorix cannot confirm this volume is unprotected." => {
-            "至少一个仓库扫描失败，因此 Restorix 无法确认这个 volume 未受保护。".to_string()
-        }
-        "An enabled repository has no expected snapshot hostname, so Restorix cannot prove host-specific backup coverage." => {
-            "已启用仓库未配置预期快照主机名，因此 Restorix 无法证明此主机的备份覆盖。".to_string()
-        }
-        "Repository scan failed, so Restorix cannot determine backup health for this volume." => {
-            "仓库扫描失败，因此 Restorix 无法判断这个 volume 的备份健康状态。".to_string()
-        }
-        "Restic is required by at least one enabled repository but is not installed." => {
-            "至少一个已启用仓库需要 restic，但当前没有安装 restic。".to_string()
-        }
-        "Restic is not installed. Install restic with Homebrew: brew install restic" => {
-            "未安装 restic。可以使用 Homebrew 安装：brew install restic".to_string()
-        }
-        "No enabled backup repositories are configured, so Restorix can list Docker volumes but cannot verify backups." => {
-            "还没有配置已启用的备份仓库，因此 Restorix 可以列出 Docker volumes，但无法验证备份。".to_string()
-        }
-        "Loose matching is disabled." => "宽松匹配已关闭。".to_string(),
-        _ => localized_dynamic_message(value),
+    match diagnostic.code {
+        DiagnosticCode::VolumeMountpointMissing => "Docker 元数据不完整：volume 挂载路径为空。".to_string(),
+        DiagnosticCode::NoEnabledRepositories => "还没有配置已启用的备份仓库。".to_string(),
+        DiagnosticCode::NoSnapshotMatch => "没有可靠的 snapshot 路径匹配这个 Docker volume 挂载点。".to_string(),
+        DiagnosticCode::VolumeNameMatchOnly => "只找到了 volume 名称匹配。启用宽松匹配后才会把它视为已保护。".to_string(),
+        DiagnosticCode::RecentSnapshot => "最近的 restic snapshot 匹配这个 Docker volume 挂载点。".to_string(),
+        DiagnosticCode::SnapshotTimeUnparseable => "找到了匹配的 snapshot，但无法解析它的时间戳。".to_string(),
+        DiagnosticCode::FutureSnapshot => "匹配的 snapshot 时间戳在未来，因此无法判断备份是否新鲜。".to_string(),
+        DiagnosticCode::RepositoryCoverageUnknown => "至少一个仓库扫描失败，因此 Restorix 无法确认这个 volume 未受保护。".to_string(),
+        DiagnosticCode::MissingExpectedHostname => "已启用仓库未配置预期快照主机名，因此 Restorix 无法证明此主机的备份覆盖。".to_string(),
+        DiagnosticCode::ResticRequiredMissing => "至少一个已启用仓库需要 restic，但当前没有安装 restic。".to_string(),
+        DiagnosticCode::ResticUnavailable => "未安装 restic。可以使用 Homebrew 安装：brew install restic".to_string(),
+        DiagnosticCode::BackupVerificationUnconfigured => "还没有配置已启用的备份仓库，因此 Restorix 可以列出 Docker volumes，但无法验证备份。".to_string(),
+        DiagnosticCode::StaleSnapshot => format!(
+            "最新匹配的 snapshot 已超过过期阈值（{} 小时）。",
+            diagnostic.context.hours.unwrap_or_default()
+        ),
+        DiagnosticCode::StatefulVolumes => format!(
+            "这些 volumes 看起来是有状态服务或数据库数据：{}。文件级 snapshots 可能仍需要应用级 dump，或在容器停止后创建，才能保证恢复一致性。",
+            diagnostic.context.volumes.join(", ")
+        ),
+        DiagnosticCode::ChildPathOnly => "snapshot 只覆盖了这个 Docker volume 内的子路径，因此无法确认整个 volume 已受保护。".to_string(),
+        DiagnosticCode::UnreliableSnapshotMatch => "snapshot 覆盖关系不够可靠，无法判断整个 volume 的保护状态。".to_string(),
+        DiagnosticCode::RepositoryScanFailed => match (
+            diagnostic.context.repository.as_deref(),
+            diagnostic.context.detail.as_deref(),
+        ) {
+            (Some(repository), Some(detail)) => format!("仓库 {repository} 扫描失败：{detail}"),
+            _ => diagnostic.message.clone(),
+        },
+        DiagnosticCode::LooseMatchingDisabled => "宽松匹配已关闭。".to_string(),
+        _ => diagnostic.message.clone(),
     }
-}
-
-fn localized_dynamic_message(value: &str) -> String {
-    if let Some(hours) = value
-        .strip_prefix("Latest matching snapshot is older than the stale threshold (")
-        .and_then(|rest| rest.strip_suffix(" hours)."))
-    {
-        return format!("最新匹配的 snapshot 已超过过期阈值（{hours} 小时）。");
-    }
-
-    if let Some(volumes) = value
-        .strip_prefix("These volumes look stateful or database-backed: ")
-        .and_then(|rest| {
-            rest.strip_suffix(". File-level snapshots may still need app-aware dumps or a stopped container for consistent restores.")
-        })
-    {
-        return format!(
-            "这些 volumes 看起来是有状态服务或数据库数据：{volumes}。文件级 snapshots 可能仍需要应用级 dump，或在容器停止后创建，才能保证恢复一致性。"
-        );
-    }
-
-    value.to_string()
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -177,3 +145,4 @@ pub(super) fn label(language: ReportLanguage, label: Label) -> &'static str {
         (ReportLanguage::SimplifiedChinese, Label::Warnings) => "警告",
     }
 }
+use crate::diagnostic::{Diagnostic, DiagnosticCode};

@@ -1,3 +1,4 @@
+use crate::diagnostic::Diagnostic;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,7 +98,7 @@ pub struct VolumeHealth {
     pub last_backup_time: Option<String>,
     pub backup_age_hours: Option<f64>,
     pub restore_command: Option<String>,
-    pub reason: String,
+    pub reason: Diagnostic,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -124,6 +125,6 @@ pub struct ScanResult {
     pub repositories: Vec<BackupRepository>,
     pub snapshots: Vec<BackupSnapshot>,
     pub volume_health: Vec<VolumeHealth>,
-    pub warnings: Vec<String>,
-    pub errors: Vec<String>,
+    pub warnings: Vec<Diagnostic>,
+    pub errors: Vec<Diagnostic>,
 }

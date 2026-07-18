@@ -136,9 +136,8 @@ enum CoreBridgeError: LocalizedError {
     }
 }
 
-private final class ProcessRunState: @unchecked Sendable {
+private nonisolated final class ProcessRunState: @unchecked Sendable {
     private let lock = NSLock()
-    nonisolated(unsafe)
     private var finished = false
     private var timedOut = false
 
@@ -154,7 +153,6 @@ private final class ProcessRunState: @unchecked Sendable {
         lock.unlock()
     }
 
-    nonisolated
     func finish(_ action: () -> Void) {
         lock.lock()
         if finished {
@@ -167,7 +165,7 @@ private final class ProcessRunState: @unchecked Sendable {
     }
 }
 
-private final class PipeOutputCollector: @unchecked Sendable {
+private nonisolated final class PipeOutputCollector: @unchecked Sendable {
     private let lock = NSLock()
     private let handle: FileHandle
     private var data = Data()

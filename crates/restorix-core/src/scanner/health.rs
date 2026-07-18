@@ -1,7 +1,9 @@
+use crate::diagnostic::{Diagnostic, DiagnosticCode};
 use crate::models::{
     BackupRepository, BackupSnapshot, DockerVolume, HealthStatus, MatchConfidence, VolumeHealth,
 };
 use crate::scanner::matcher::{best_snapshot_match, is_reliable_match};
+use crate::scanner::restore_command::build_restore_command;
 use chrono::{DateTime, Utc};
 
 pub fn calculate_volume_health(
@@ -38,12 +40,17 @@ fn calculate_one_volume_health(
     if volume.mountpoint.trim().is_empty() {
         return unknown(
             volume,
+            DiagnosticCode::VolumeMountpointMissing,
             "Docker metadata is incomplete: volume mountpoint is empty.",
         );
     }
 
     if repositories.iter().all(|repo| !repo.enabled) {
-        return unknown(volume, "No enabled backup repositories are configured.");
+        return unknown(
+            volume,
+            DiagnosticCode::NoEnabledRepositories,
+            "No enabled backup repositories are configured.",
+        );
     }
 
     let trusted_snapshots = snapshots
@@ -59,6 +66,7 @@ fn calculate_one_volume_health(
         {
             return unknown(
                 volume,
+                DiagnosticCode::MissingExpectedHostname,
                 "An enabled repository has no expected snapshot hostname, so Restorix cannot prove host-specific backup coverage.",
             );
         }
@@ -71,7 +79,10 @@ fn calculate_one_volume_health(
             last_backup_time: None,
             backup_age_hours: None,
             restore_command: None,
-            reason: "No reliable snapshot path matched this Docker volume mountpoint.".to_string(),
+            reason: Diagnostic::simple(
+                DiagnosticCode::NoSnapshotMatch,
+                "No reliable snapshot path matched this Docker volume mountpoint.",
+            ),
         };
     };
 
@@ -85,14 +96,23 @@ fn calculate_one_volume_health(
         repo.map(|repo| build_restore_command(repo, &snapshot.id, &volume.mountpoint));
 
     if !reliable {
-        let reason = match snapshot_match.confidence {
+        let (code, reason) = match snapshot_match.confidence {
             MatchConfidence::ChildPath => {
-                "A snapshot only covers a child path inside this Docker volume, so full-volume protection is unknown."
+                (
+                    DiagnosticCode::ChildPathOnly,
+                    "A snapshot only covers a child path inside this Docker volume, so full-volume protection is unknown.",
+                )
             }
             MatchConfidence::VolumeName => {
-                "Only a volume-name match was found. Enable loose matching to treat this as protected."
+                (
+                    DiagnosticCode::VolumeNameMatchOnly,
+                    "Only a volume-name match was found. Enable loose matching to treat this as protected.",
+                )
             }
-            _ => "Snapshot coverage is not reliable enough to determine full-volume protection.",
+            _ => (
+                DiagnosticCode::UnreliableSnapshotMatch,
+                "Snapshot coverage is not reliable enough to determine full-volume protection.",
+            ),
         };
         return VolumeHealth {
             volume: volume.clone(),
@@ -103,7 +123,7 @@ fn calculate_one_volume_health(
             last_backup_time: Some(snapshot.time),
             backup_age_hours: age_hours,
             restore_command,
-            reason: reason.to_string(),
+            reason: Diagnostic::simple(code, reason),
         };
     }
 
@@ -117,8 +137,10 @@ fn calculate_one_volume_health(
             last_backup_time: Some(snapshot.time),
             backup_age_hours: Some(age),
             restore_command,
-            reason: "A matching snapshot has a future timestamp, so backup freshness is unknown."
-                .to_string(),
+            reason: Diagnostic::simple(
+                DiagnosticCode::FutureSnapshot,
+                "A matching snapshot has a future timestamp, so backup freshness is unknown.",
+            ),
         },
         Some(age) if age > stale_hours as f64 => VolumeHealth {
             volume: volume.clone(),
@@ -129,8 +151,12 @@ fn calculate_one_volume_health(
             last_backup_time: Some(snapshot.time),
             backup_age_hours: Some(age),
             restore_command,
-            reason: format!(
-                "Latest matching snapshot is older than the stale threshold ({stale_hours} hours)."
+            reason: Diagnostic::with_hours(
+                DiagnosticCode::StaleSnapshot,
+                format!(
+                    "Latest matching snapshot is older than the stale threshold ({stale_hours} hours)."
+                ),
+                stale_hours,
             ),
         },
         Some(age) => VolumeHealth {
@@ -142,7 +168,10 @@ fn calculate_one_volume_health(
             last_backup_time: Some(snapshot.time),
             backup_age_hours: Some(age),
             restore_command,
-            reason: "A recent restic snapshot matches this Docker volume mountpoint.".to_string(),
+            reason: Diagnostic::simple(
+                DiagnosticCode::RecentSnapshot,
+                "A recent restic snapshot matches this Docker volume mountpoint.",
+            ),
         },
         None => VolumeHealth {
             volume: volume.clone(),
@@ -153,8 +182,10 @@ fn calculate_one_volume_health(
             last_backup_time: Some(snapshot.time),
             backup_age_hours: None,
             restore_command,
-            reason: "A matching snapshot was found, but its timestamp could not be parsed."
-                .to_string(),
+            reason: Diagnostic::simple(
+                DiagnosticCode::SnapshotTimeUnparseable,
+                "A matching snapshot was found, but its timestamp could not be parsed.",
+            ),
         },
     }
 }
@@ -165,8 +196,10 @@ pub fn mark_repository_failures_unknown(volume_health: &mut [VolumeHealth]) {
         .filter(|health| health.status == HealthStatus::Unprotected)
     {
         health.status = HealthStatus::Unknown;
-        health.reason = "At least one repository scan failed, so Restorix cannot confirm this volume is unprotected."
-            .to_string();
+        health.reason = Diagnostic::simple(
+            DiagnosticCode::RepositoryCoverageUnknown,
+            "At least one repository scan failed, so Restorix cannot confirm this volume is unprotected.",
+        );
     }
 }
 
@@ -188,7 +221,7 @@ fn missing_expected_hostname(repository: &BackupRepository) -> bool {
         .is_none_or(|hostname| hostname.trim().is_empty())
 }
 
-fn unknown(volume: &DockerVolume, reason: &str) -> VolumeHealth {
+fn unknown(volume: &DockerVolume, code: DiagnosticCode, reason: &str) -> VolumeHealth {
     VolumeHealth {
         volume: volume.clone(),
         status: HealthStatus::Unknown,
@@ -198,46 +231,12 @@ fn unknown(volume: &DockerVolume, reason: &str) -> VolumeHealth {
         last_backup_time: None,
         backup_age_hours: None,
         restore_command: None,
-        reason: reason.to_string(),
+        reason: Diagnostic::simple(code, reason),
     }
-}
-
-pub fn build_restore_command(
-    repo: &BackupRepository,
-    snapshot_id: &str,
-    include_path: &str,
-) -> String {
-    let password_assignment = repo
-        .password_env_key
-        .as_deref()
-        .filter(|key| is_valid_environment_key(key))
-        .map(|key| {
-            format!(" RESTIC_PASSWORD=\"${{{key}:?Set {key} before running this command}}\"")
-        })
-        .unwrap_or_default();
-
-    format!(
-        "RESTIC_REPOSITORY={}{} restic restore {} --target {} --include {}",
-        shell_quote(&repo.location),
-        password_assignment,
-        shell_quote(snapshot_id),
-        shell_quote("./restorix-restore-test"),
-        shell_quote(include_path)
-    )
 }
 
 fn snapshot_age_hours(time: &str, now: DateTime<Utc>) -> Option<f64> {
     let parsed = DateTime::parse_from_rfc3339(time).ok()?.with_timezone(&Utc);
     let duration = now.signed_duration_since(parsed);
     Some(duration.num_minutes() as f64 / 60.0)
-}
-
-fn shell_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\"'\"'"))
-}
-
-fn is_valid_environment_key(key: &str) -> bool {
-    let mut characters = key.chars();
-    matches!(characters.next(), Some(character) if character == '_' || character.is_ascii_alphabetic())
-        && characters.all(|character| character == '_' || character.is_ascii_alphanumeric())
 }

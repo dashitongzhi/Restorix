@@ -1,7 +1,6 @@
 import Foundation
 import Combine
 import AppKit
-import ServiceManagement
 
 @MainActor
 final class AppViewModel: ObservableObject {
@@ -16,10 +15,24 @@ final class AppViewModel: ObservableObject {
     @Published var language: AppLanguage
     @Published var selectedAppIcon: AppIconChoice
 
-    private let coreBridge: CoreBridge
+    private let workflow: any AppWorkflowing
+    private let settingsCoordinator: SettingsCoordinator
 
-    init(coreBridge: CoreBridge? = nil) {
-        self.coreBridge = coreBridge ?? CoreBridge()
+    init(
+        coreBridge: (any CoreBridging)? = nil,
+        systemPreferences: (any SystemPreferencesApplying)? = nil,
+        notificationCoordinator: NotificationCoordinator? = nil,
+        workflow: (any AppWorkflowing)? = nil
+    ) {
+        let resolvedCoreBridge = coreBridge ?? CoreBridge()
+        self.settingsCoordinator = SettingsCoordinator(
+            coreBridge: resolvedCoreBridge,
+            systemPreferences: systemPreferences ?? MacSystemPreferencesAdapter()
+        )
+        self.workflow = workflow ?? AppWorkflow(
+            coreBridge: resolvedCoreBridge,
+            notificationCoordinator: notificationCoordinator ?? NotificationCoordinator()
+        )
         let storedLanguage = UserDefaults.standard.string(forKey: "app.language") ?? AppLanguage.english.rawValue
         self.language = AppLanguage(rawValue: storedLanguage) ?? .english
         self.selectedAppIcon = AppIconChoice.stored()
@@ -49,13 +62,10 @@ final class AppViewModel: ObservableObject {
         lastError = nil
 
         do {
-            let result = try await coreBridge.scan()
-            scanResult = result
-            repositories = result.repositories
-            NotificationService.notifyIfNeeded(
-                for: result,
-                enabled: settings?.notificationsEnabled == true
-            )
+            apply(try await workflow.scan(
+                notificationsEnabled: settings?.notificationsEnabled == true,
+                language: language
+            ))
         } catch {
             lastError = error.localizedDescription
         }
@@ -66,7 +76,7 @@ final class AppViewModel: ObservableObject {
         defer { isLoadingRepositories = false }
 
         do {
-            repositories = try await coreBridge.listRepositories()
+            repositories = try await workflow.loadRepositories()
         } catch {
             lastError = error.localizedDescription
         }
@@ -79,16 +89,16 @@ final class AppViewModel: ObservableObject {
 
     func addRepository(name: String, location: String, passwordEnvKey: String?, password: String?, expectedHostname: String, enabled: Bool) async -> String? {
         do {
-            _ = try await coreBridge.addRepository(
+            apply(try await workflow.addRepository(
                 name: name,
                 location: location,
                 passwordEnvKey: passwordEnvKey,
                 password: password,
                 expectedHostname: expectedHostname,
-                enabled: enabled
-            )
-            await loadRepositories()
-            await scanNow()
+                enabled: enabled,
+                notificationsEnabled: settings?.notificationsEnabled == true,
+                language: language
+            ))
             return nil
         } catch {
             let message = error.localizedDescription
@@ -99,9 +109,11 @@ final class AppViewModel: ObservableObject {
 
     func removeRepository(_ repository: BackupRepository) async {
         do {
-            _ = try await coreBridge.removeRepository(id: repository.id)
-            await loadRepositories()
-            await scanNow()
+            apply(try await workflow.removeRepository(
+                id: repository.id,
+                notificationsEnabled: settings?.notificationsEnabled == true,
+                language: language
+            ))
         } catch {
             lastError = error.localizedDescription
         }
@@ -109,9 +121,12 @@ final class AppViewModel: ObservableObject {
 
     func setRepository(_ repository: BackupRepository, enabled: Bool) async {
         do {
-            _ = try await coreBridge.setRepositoryEnabled(id: repository.id, enabled: enabled)
-            await loadRepositories()
-            await scanNow()
+            apply(try await workflow.setRepositoryEnabled(
+                id: repository.id,
+                enabled: enabled,
+                notificationsEnabled: settings?.notificationsEnabled == true,
+                language: language
+            ))
         } catch {
             lastError = error.localizedDescription
         }
@@ -119,7 +134,7 @@ final class AppViewModel: ObservableObject {
 
     func testRepository(_ repository: BackupRepository) async -> Int? {
         do {
-            let snapshots = try await coreBridge.testRepository(id: repository.id)
+            let snapshots = try await workflow.testRepository(id: repository.id)
             return snapshots.count
         } catch {
             lastError = error.localizedDescription
@@ -137,7 +152,7 @@ final class AppViewModel: ObservableObject {
         }
 
         do {
-            return try await coreBridge.exportMarkdownReport(language: language)
+            return try await workflow.exportMarkdownReport(language: language)
         } catch {
             lastError = error.localizedDescription
             return nil
@@ -146,80 +161,27 @@ final class AppViewModel: ObservableObject {
 
     func loadConfig() async {
         do {
-            let loadedSettings = try await coreBridge.getConfig()
-            settings = await settingsByReconcilingLaunchAtLogin(loadedSettings)
-            applyDockIconPreference(settings?.showDockIcon == true)
+            settings = try await settingsCoordinator.load()
             applySelectedAppIcon()
         } catch {
             lastError = error.localizedDescription
         }
     }
 
-    func setConfig(key: String, value: String) async {
+    private func apply(_ state: AppScanState) {
+        scanResult = state.result
+        repositories = state.repositories
+    }
+
+    @discardableResult
+    func commitSettings(_ draft: SettingsDraft) async -> Bool {
+        lastError = nil
         do {
-            let updatedSettings = try await coreBridge.setConfig(key: key, value: value)
-            settings = await settingsByReconcilingLaunchAtLogin(updatedSettings)
-            if key == "show_dock_icon" {
-                applyDockIconPreference(settings?.showDockIcon == true)
-            }
+            settings = try await settingsCoordinator.commit(draft)
+            return true
         } catch {
             lastError = error.localizedDescription
-        }
-    }
-
-    func setLaunchAtLogin(_ enabled: Bool) async {
-        do {
-            try applyLaunchAtLoginPreference(enabled)
-        } catch {
-            lastError = error.localizedDescription
-        }
-
-        await refreshLaunchAtLoginSettingFromSystem()
-    }
-
-    func applyDockIconPreference(_ showDockIcon: Bool) {
-        NSApp.setActivationPolicy(showDockIcon ? .regular : .accessory)
-        if showDockIcon {
-            NSApp.activate(ignoringOtherApps: true)
-        }
-    }
-
-    func applyLaunchAtLoginPreference(_ enabled: Bool) throws {
-        let service = SMAppService.mainApp
-        if enabled {
-            if service.status != .enabled {
-                try service.register()
-            }
-        } else if service.status == .enabled || service.status == .requiresApproval {
-            try service.unregister()
-        }
-    }
-
-    private func refreshLaunchAtLoginSettingFromSystem() async {
-        guard let settings else {
-            await loadConfig()
-            return
-        }
-
-        self.settings = await settingsByReconcilingLaunchAtLogin(settings)
-    }
-
-    private func settingsByReconcilingLaunchAtLogin(_ loadedSettings: AppSettings) async -> AppSettings {
-        let systemEnabled = SMAppService.mainApp.status == .enabled
-        guard loadedSettings.launchAtLogin != systemEnabled else {
-            return loadedSettings
-        }
-
-        do {
-            return try await coreBridge.setConfig(
-                key: "launch_at_login",
-                value: systemEnabled ? "true" : "false"
-            )
-        } catch {
-            lastError = error.localizedDescription
-            var fallback = loadedSettings
-            fallback.launchAtLogin = systemEnabled
-            return fallback
+            return false
         }
     }
 
@@ -243,24 +205,7 @@ final class AppViewModel: ObservableObject {
     }
 
     var overallStatus: HealthStatus {
-        guard let result = scanResult else {
-            return .Unknown
-        }
-
-        let summary = result.summary
-        if !result.errors.isEmpty {
-            return .Error
-        }
-
-        if summary.errorCount > 0 || summary.unprotectedCount > 0 {
-            return .Error
-        }
-
-        if summary.staleCount > 0 || summary.unknownCount > 0 {
-            return .Stale
-        }
-
-        return .Protected
+        ScanPresentation.overallStatus(for: scanResult)
     }
 
     var dockerStateText: String {
@@ -286,8 +231,6 @@ final class AppViewModel: ObservableObject {
     }
 
     var riskyVolumes: [VolumeHealth] {
-        scanResult?.volumeHealth.filter { item in
-            item.status == .Unprotected || item.status == .Stale || item.status == .Error
-        } ?? []
+        scanResult.map(VolumeRiskPolicy.itemsRequiringAttention(in:)) ?? []
     }
 }

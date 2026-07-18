@@ -1,5 +1,5 @@
 use restorix_core::models::BackupTool;
-use restorix_core::storage::config::ConfigStore;
+use restorix_core::storage::config::{ConfigStore, SettingsDraft};
 use std::sync::{Arc, Barrier};
 
 #[test]
@@ -72,17 +72,83 @@ fn updates_launch_at_login_setting() {
     let temp_dir = tempfile::tempdir().unwrap();
     let store = ConfigStore::new(temp_dir.path().join("config.json"));
 
-    let config = store.set_value("launch_at_login", "true").unwrap();
+    let mut draft = default_draft();
+    draft.launch_at_login = true;
+    let config = store.commit_settings(draft.clone()).unwrap();
     assert!(config.launch_at_login);
 
     let loaded = store.load().unwrap();
     assert!(loaded.launch_at_login);
 
-    let config = store.set_value("launch_at_login", "false").unwrap();
+    draft.launch_at_login = false;
+    let config = store.commit_settings(draft).unwrap();
     assert!(!config.launch_at_login);
 
     let loaded = store.load().unwrap();
     assert!(!loaded.launch_at_login);
+}
+
+#[test]
+fn commits_all_settings_in_one_atomic_update() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let store = ConfigStore::new(temp_dir.path().join("config.json"));
+    store
+        .add_repository(
+            "Local Restic".to_string(),
+            BackupTool::Restic,
+            "/tmp/restic".to_string(),
+            None,
+            Some("homelab".to_string()),
+            true,
+        )
+        .unwrap();
+
+    let committed = store
+        .commit_settings(SettingsDraft {
+            stale_hours: 48,
+            loose_matching: true,
+            show_dock_icon: false,
+            launch_at_login: true,
+            notifications_enabled: true,
+            cli_path: "/opt/restorix".to_string(),
+        })
+        .unwrap();
+
+    assert_eq!(committed.stale_hours, 48);
+    assert!(committed.loose_matching);
+    assert!(!committed.show_dock_icon);
+    assert!(committed.launch_at_login);
+    assert!(committed.notifications_enabled);
+    assert_eq!(committed.cli_path, "/opt/restorix");
+    assert_eq!(committed.repositories.len(), 1);
+}
+
+#[test]
+fn rejects_invalid_settings_without_partial_commit() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let store = ConfigStore::new(temp_dir.path().join("config.json"));
+    let mut existing = default_draft();
+    existing.notifications_enabled = true;
+    store.commit_settings(existing).unwrap();
+
+    let error = store
+        .commit_settings(SettingsDraft {
+            stale_hours: 0,
+            loose_matching: true,
+            show_dock_icon: false,
+            launch_at_login: true,
+            notifications_enabled: false,
+            cli_path: "/invalid".to_string(),
+        })
+        .unwrap_err();
+
+    assert!(error.to_string().contains("between 1 and 720"));
+    let loaded = store.load().unwrap();
+    assert_eq!(loaded.stale_hours, 72);
+    assert!(loaded.notifications_enabled);
+    assert!(loaded.show_dock_icon);
+    assert!(!loaded.launch_at_login);
+    assert!(loaded.cli_path.is_empty());
 }
 
 #[test]
@@ -147,32 +213,43 @@ fn old_config_missing_new_fields_preserves_existing_repositories() {
 }
 
 #[test]
-fn concurrent_config_updates_preserve_both_changes() {
+fn concurrent_repository_and_settings_updates_preserve_both_changes() {
     let temp_dir = tempfile::tempdir().unwrap();
     let store = Arc::new(ConfigStore::new(temp_dir.path().join("config.json")));
     let barrier = Arc::new(Barrier::new(3));
 
-    let stale_store = Arc::clone(&store);
-    let stale_barrier = Arc::clone(&barrier);
-    let stale_update = std::thread::spawn(move || {
-        stale_barrier.wait();
-        stale_store.set_value("stale_hours", "48")
+    let settings_store = Arc::clone(&store);
+    let settings_barrier = Arc::clone(&barrier);
+    let settings_update = std::thread::spawn(move || {
+        settings_barrier.wait();
+        let mut draft = default_draft();
+        draft.stale_hours = 48;
+        draft.notifications_enabled = true;
+        settings_store.commit_settings(draft)
     });
 
-    let notification_store = Arc::clone(&store);
-    let notification_barrier = Arc::clone(&barrier);
-    let notification_update = std::thread::spawn(move || {
-        notification_barrier.wait();
-        notification_store.set_value("notifications_enabled", "true")
+    let repository_store = Arc::clone(&store);
+    let repository_barrier = Arc::clone(&barrier);
+    let repository_update = std::thread::spawn(move || {
+        repository_barrier.wait();
+        repository_store.add_repository(
+            "Concurrent Restic".to_string(),
+            BackupTool::Restic,
+            "/tmp/restic".to_string(),
+            None,
+            Some("homelab".to_string()),
+            true,
+        )
     });
 
     barrier.wait();
-    stale_update.join().unwrap().unwrap();
-    notification_update.join().unwrap().unwrap();
+    settings_update.join().unwrap().unwrap();
+    repository_update.join().unwrap().unwrap();
 
     let config = store.load().unwrap();
     assert_eq!(config.stale_hours, 48);
     assert!(config.notifications_enabled);
+    assert_eq!(config.repositories.len(), 1);
 }
 
 #[cfg(unix)]
@@ -182,11 +259,24 @@ fn config_file_is_written_with_owner_only_permissions() {
 
     let temp_dir = tempfile::tempdir().unwrap();
     let store = ConfigStore::new(temp_dir.path().join("config.json"));
-    store.set_value("stale_hours", "48").unwrap();
+    let mut draft = default_draft();
+    draft.stale_hours = 48;
+    store.commit_settings(draft).unwrap();
 
     let mode = std::fs::metadata(store.path())
         .unwrap()
         .permissions()
         .mode();
     assert_eq!(mode & 0o077, 0);
+}
+
+fn default_draft() -> SettingsDraft {
+    SettingsDraft {
+        stale_hours: 72,
+        loose_matching: false,
+        show_dock_icon: true,
+        launch_at_login: false,
+        notifications_enabled: false,
+        cli_path: String::new(),
+    }
 }

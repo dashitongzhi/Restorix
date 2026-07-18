@@ -30,7 +30,7 @@ struct VolumeHealthRow: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
 
-            Text(item.reason)
+            Text(item.reason.localizedMessage(language: app.language))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)

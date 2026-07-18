@@ -1,16 +1,21 @@
 import Foundation
 import Security
 
-enum KeychainCredentialStore {
+protocol CredentialStoring {
+    func save(_ password: String, for environmentKey: String) throws
+    func password(for environmentKey: String) throws -> String?
+}
+
+struct KeychainCredentialStore: CredentialStoring {
     private static let service = "Kral.Restorix.restic"
 
-    static func save(_ password: String, for environmentKey: String) throws {
+    func save(_ password: String, for environmentKey: String) throws {
         let account = environmentKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !account.isEmpty else { return }
         let data = Data(password.utf8)
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
-            kSecAttrService: service,
+            kSecAttrService: Self.service,
             kSecAttrAccount: account
         ]
         let attributes: [CFString: Any] = [kSecValueData: data]
@@ -25,10 +30,10 @@ enum KeychainCredentialStore {
         }
     }
 
-    static func password(for environmentKey: String) throws -> String? {
+    func password(for environmentKey: String) throws -> String? {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
-            kSecAttrService: service,
+            kSecAttrService: Self.service,
             kSecAttrAccount: environmentKey,
             kSecReturnData: true,
             kSecMatchLimit: kSecMatchLimitOne

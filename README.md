@@ -147,7 +147,7 @@ cargo run -p restorix-cli -- report markdown --language zh-Hans
 | `restorix scan --json` | Produce the full health model. |
 | `restorix report markdown --language en` | Export a Markdown report. |
 | `restorix config get --json` | Read local settings. |
-| `restorix config set <key> <value>` | Update local settings. |
+| `restorix config commit '<json>'` | Validate and update all local settings in one transaction. |
 
 ## macOS App
 
@@ -252,8 +252,17 @@ Use this ladder before treating a branch as shippable:
 ```bash
 cargo test
 
+cargo clippy --workspace --all-targets -- -D warnings
+
+shellcheck script/*.sh script/lib/*.sh script/fixtures/*.sh
+
+bash script/smoke_cli_command_runner.sh
+bash script/smoke_notification_policy.sh
+bash script/smoke_settings_coordinator.sh
+
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-  xcodebuild -list -project Restorix.xcodeproj
+  xcodebuild -project Restorix.xcodeproj -scheme Restorix \
+    -configuration Debug CODE_SIGNING_ALLOWED=NO build
 
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
   bash script/verify_release_package.sh

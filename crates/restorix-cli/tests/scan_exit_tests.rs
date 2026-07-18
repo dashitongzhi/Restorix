@@ -27,6 +27,9 @@ fn scan_returns_nonzero_when_required_dependencies_are_unavailable() {
     assert!(scan["summary"]["error_count"]
         .as_u64()
         .is_some_and(|count| count > 0));
+    assert!(scan["errors"]
+        .as_array()
+        .is_some_and(|errors| errors.iter().all(|error| error["code"].is_string())));
 }
 
 #[test]
@@ -51,4 +54,42 @@ fn markdown_report_returns_nonzero_when_scan_has_hard_errors() {
     assert!(String::from_utf8(output.stdout)
         .unwrap()
         .contains("## Errors"));
+}
+
+#[test]
+fn config_commit_accepts_one_typed_settings_payload() {
+    let config_path = std::env::temp_dir().join(format!(
+        "restorix-config-commit-test-{}-{}.json",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let payload = serde_json::json!({
+        "stale_hours": 48,
+        "loose_matching": true,
+        "show_dock_icon": false,
+        "launch_at_login": true,
+        "notifications_enabled": true,
+        "cli_path": "/opt/restorix"
+    })
+    .to_string();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_restorix"))
+        .args(["config", "commit", &payload])
+        .env("RESTORIX_CONFIG", &config_path)
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let config: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(config["stale_hours"], 48);
+    assert_eq!(config["loose_matching"], true);
+    assert_eq!(config["show_dock_icon"], false);
+    assert_eq!(config["launch_at_login"], true);
+    assert_eq!(config["notifications_enabled"], true);
+    assert_eq!(config["cli_path"], "/opt/restorix");
+
+    let _ = std::fs::remove_file(config_path);
 }
