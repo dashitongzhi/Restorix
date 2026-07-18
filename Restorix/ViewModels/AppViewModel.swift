@@ -12,6 +12,7 @@ final class AppViewModel: ObservableObject {
     @Published var lastError: String?
     @Published var selectedSidebarItem: SidebarItem = .dashboard
     @Published var isAddingRepository = false
+    @Published private(set) var isCommittingSettings = false
     @Published var language: AppLanguage
     @Published var selectedAppIcon: AppIconChoice
 
@@ -102,6 +103,7 @@ final class AppViewModel: ObservableObject {
             return nil
         } catch {
             let message = error.localizedDescription
+            await loadRepositories()
             lastError = message
             return message
         }
@@ -115,7 +117,9 @@ final class AppViewModel: ObservableObject {
                 language: language
             ))
         } catch {
-            lastError = error.localizedDescription
+            let message = error.localizedDescription
+            await loadRepositories()
+            lastError = message
         }
     }
 
@@ -128,7 +132,9 @@ final class AppViewModel: ObservableObject {
                 language: language
             ))
         } catch {
-            lastError = error.localizedDescription
+            let message = error.localizedDescription
+            await loadRepositories()
+            lastError = message
         }
     }
 
@@ -173,8 +179,21 @@ final class AppViewModel: ObservableObject {
         repositories = state.repositories
     }
 
+    private func apply(_ outcome: AppMutationOutcome) {
+        if let result = outcome.result {
+            scanResult = result
+        }
+        if let refreshedRepositories = outcome.repositories {
+            repositories = refreshedRepositories
+        }
+        lastError = outcome.refreshWarning
+    }
+
     @discardableResult
     func commitSettings(_ draft: SettingsDraft) async -> Bool {
+        guard !isCommittingSettings else { return false }
+        isCommittingSettings = true
+        defer { isCommittingSettings = false }
         lastError = nil
         do {
             settings = try await settingsCoordinator.commit(draft)

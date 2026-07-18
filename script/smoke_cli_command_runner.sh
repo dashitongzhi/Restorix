@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNNER_SOURCE="$ROOT_DIR/Restorix/Services/CLICommandRunner.swift"
+PROCESS_SUPPORT_SOURCE="$ROOT_DIR/Restorix/Services/CLIProcessSupport.swift"
 LOCATOR_SOURCE="$ROOT_DIR/Restorix/Services/CLIExecutableLocator.swift"
 BRIDGE_SOURCE="$ROOT_DIR/Restorix/Services/CoreBridge.swift"
 SETTINGS_CORE_SOURCE="$ROOT_DIR/Restorix/Services/SettingsCoreBridging.swift"
@@ -16,6 +17,7 @@ LOCALIZATION_SOURCE="$ROOT_DIR/Restorix/Models/Localization.swift"
 ENGLISH_STRINGS_SOURCE="$ROOT_DIR/Restorix/Models/EnglishStrings.swift"
 CHINESE_STRINGS_SOURCE="$ROOT_DIR/Restorix/Models/SimplifiedChineseStrings.swift"
 MARKDOWN_RENDERER_SOURCE="$ROOT_DIR/Restorix/Services/MarkdownReportRenderer.swift"
+MARKDOWN_LOCALIZATION_SOURCE="$ROOT_DIR/Restorix/Services/MarkdownReportLocalization.swift"
 SMOKE_SOURCE="$ROOT_DIR/script/CLICommandRunnerSmoke.swift"
 FIXTURE="$ROOT_DIR/script/fixtures/cli_command_fixture.sh"
 SMOKE_BINARY="$(mktemp "${TMPDIR:-/tmp}/restorix-cli-command-runner.XXXXXX")"
@@ -27,6 +29,7 @@ trap cleanup EXIT
 
 xcrun swiftc \
   "$RUNNER_SOURCE" \
+  "$PROCESS_SUPPORT_SOURCE" \
   "$LOCATOR_SOURCE" \
   "$SETTINGS_CORE_SOURCE" \
   "$BRIDGE_SOURCE" \
@@ -40,6 +43,7 @@ xcrun swiftc \
   "$ENGLISH_STRINGS_SOURCE" \
   "$CHINESE_STRINGS_SOURCE" \
   "$MARKDOWN_RENDERER_SOURCE" \
+  "$MARKDOWN_LOCALIZATION_SOURCE" \
   "$SMOKE_SOURCE" \
   -framework Security \
   -o "$SMOKE_BINARY"

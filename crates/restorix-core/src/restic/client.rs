@@ -38,17 +38,28 @@ impl ResticClient {
         let mut command = Command::new("restic");
         command.arg("version");
 
-        let check_result = run_with_timeout(command, "restic", "version", RESTIC_CHECK_TIMEOUT);
-        let message = check_result.as_ref().err().map(ToString::to_string);
-        let version = check_result
-            .ok()
-            .filter(|output| output.status.success())
-            .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string());
-
-        ResticStatus {
-            installed: true,
-            version,
-            message,
+        match run_with_timeout(command, "restic", "version", RESTIC_CHECK_TIMEOUT) {
+            Ok(output) if output.status.success() => ResticStatus {
+                installed: true,
+                version: Some(String::from_utf8_lossy(&output.stdout).trim().to_string()),
+                message: None,
+            },
+            Ok(output) => ResticStatus {
+                installed: true,
+                version: None,
+                message: Some(format!(
+                    "Restic version check failed: {}",
+                    clean_stderr(
+                        &output.stderr,
+                        "restic version returned a nonzero exit code."
+                    )
+                )),
+            },
+            Err(error) => ResticStatus {
+                installed: true,
+                version: None,
+                message: Some(error.to_string()),
+            },
         }
     }
 

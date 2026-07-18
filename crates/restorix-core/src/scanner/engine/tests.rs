@@ -1,6 +1,7 @@
 mod support;
 
 use super::scan_with_sources;
+use crate::diagnostic::DiagnosticCode;
 use crate::models::HealthStatus;
 use support::*;
 
@@ -61,6 +62,25 @@ fn missing_restic_is_a_hard_error_when_a_repository_is_enabled() {
         .iter()
         .any(|error| error.message.contains("Restic is required")));
     assert_eq!(result.volume_health[0].status, HealthStatus::Unknown);
+}
+
+#[test]
+fn restic_check_failure_is_not_reported_as_not_installed() {
+    let config = FixedConfig::success(Default::default());
+    let docker = FakeDocker::running(Vec::new());
+    let backup = FakeBackup::check_failed("restic version timed out");
+    let clock = FixedClock::at(2026, 5, 15, 10);
+
+    let result = scan_with_sources(&config, &docker, &backup, &clock);
+
+    assert!(result.summary.restic_available);
+    assert!(result.warnings.iter().any(|warning| {
+        warning.code == DiagnosticCode::ResticCheckFailed && warning.message.contains("timed out")
+    }));
+    assert!(!result
+        .warnings
+        .iter()
+        .any(|warning| warning.code == DiagnosticCode::ResticUnavailable));
 }
 
 #[test]

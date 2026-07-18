@@ -151,6 +151,18 @@ impl FakeBackup {
             failure: None,
         }
     }
+
+    pub(super) fn check_failed(message: &str) -> Self {
+        Self {
+            status: ResticStatus {
+                installed: true,
+                version: None,
+                message: Some(message.to_string()),
+            },
+            snapshots: Vec::new(),
+            failure: None,
+        }
+    }
 }
 
 impl BackupSource for FakeBackup {

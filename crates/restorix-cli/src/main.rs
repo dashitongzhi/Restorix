@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use clap::{ArgAction, Args, Parser, Subcommand};
 use restorix_core::commands;
 use restorix_core::storage::config::{ConfigStore, SettingsDraft};
@@ -92,7 +92,14 @@ struct ReportMarkdownArgs {
 #[derive(Debug, Subcommand)]
 enum ConfigCommand {
     Get(JsonFlag),
-    Commit { payload: String },
+    Commit {
+        payload: String,
+    },
+    #[command(hide = true)]
+    Set {
+        key: String,
+        value: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -168,10 +175,45 @@ fn run() -> Result<i32> {
                 let draft = serde_json::from_str::<SettingsDraft>(&payload)?;
                 print_json(&commands::commit_settings(&config_store, draft)?)?
             }
+            ConfigCommand::Set { key, value } => {
+                let draft = legacy_settings_draft(&config_store, &key, &value)?;
+                print_json(&commands::commit_settings(&config_store, draft)?)?
+            }
         },
     }
 
     Ok(exit_code)
+}
+
+fn legacy_settings_draft(
+    config_store: &ConfigStore,
+    key: &str,
+    value: &str,
+) -> Result<SettingsDraft> {
+    let config = config_store.load()?;
+    let mut draft = SettingsDraft::from(&config);
+    match key {
+        "stale_hours" => {
+            draft.stale_hours = value
+                .parse::<u64>()
+                .map_err(|_| anyhow::anyhow!("stale_hours must be an integer."))?;
+        }
+        "loose_matching" => draft.loose_matching = parse_legacy_bool(value)?,
+        "show_dock_icon" => draft.show_dock_icon = parse_legacy_bool(value)?,
+        "launch_at_login" => draft.launch_at_login = parse_legacy_bool(value)?,
+        "notifications_enabled" => draft.notifications_enabled = parse_legacy_bool(value)?,
+        "cli_path" => draft.cli_path = value.to_string(),
+        other => bail!("Unknown config key: {other}"),
+    }
+    Ok(draft)
+}
+
+fn parse_legacy_bool(value: &str) -> Result<bool> {
+    match value {
+        "true" | "1" | "yes" | "on" => Ok(true),
+        "false" | "0" | "no" | "off" => Ok(false),
+        _ => bail!("Boolean value must be true or false."),
+    }
 }
 
 fn print_json<T: serde::Serialize>(value: &T) -> Result<()> {

@@ -257,8 +257,10 @@ cargo clippy --workspace --all-targets -- -D warnings
 shellcheck script/*.sh script/lib/*.sh script/fixtures/*.sh
 
 bash script/smoke_cli_command_runner.sh
+bash script/smoke_app_workflow.sh
 bash script/smoke_notification_policy.sh
 bash script/smoke_settings_coordinator.sh
+bash script/smoke_package_security.sh
 
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
   xcodebuild -project Restorix.xcodeproj -scheme Restorix \

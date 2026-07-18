@@ -78,7 +78,10 @@ notarize_app_bundle() {
   ditto -c -k --keepParent "$DIST_APP" "$app_zip"
   submit_for_notarization "$app_zip"
   rm -f "$app_zip"
-  truthy "$STAPLE" && staple_artifact "$DIST_APP"
+  if truthy "$STAPLE"; then
+    staple_artifact "$DIST_APP"
+  fi
+  return 0
 }
 
 verify_zip_gatekeeper() {

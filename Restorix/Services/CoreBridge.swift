@@ -95,8 +95,11 @@ final class CoreBridge: CoreBridging {
     }
 
     func exportMarkdownReport(language: AppLanguage = .english) async throws -> String {
+        let repositories = try await listRepositories()
+        let credentials = try credentials(for: repositories)
         let data = try await run(
             arguments: ["report", "markdown", "--language", language.rawValue],
+            environment: credentials,
             timeout: scanTimeoutSeconds,
             accepting: [0, 2]
         )
@@ -113,19 +116,73 @@ final class CoreBridge: CoreBridging {
             decoding: JSONEncoder().encode(draft),
             as: UTF8.self
         )
-        let data = try await run(arguments: ["config", "commit", payload])
-        return try JSONDecoder.restorix.decode(AppSettings.self, from: data)
+        do {
+            let data = try await run(arguments: ["config", "commit", payload])
+            return try JSONDecoder.restorix.decode(AppSettings.self, from: data)
+        } catch let error as CoreBridgeError where error.isUnsupportedConfigCommit {
+            return try await commitSettingsUsingLegacySet(draft)
+        }
+    }
+
+    private func commitSettingsUsingLegacySet(_ draft: SettingsDraft) async throws -> AppSettings {
+        let executableURL = cliLocator.resolve()
+        let previousData = try await run(
+            arguments: ["config", "get", "--json"],
+            executableURL: executableURL
+        )
+        let previous = try JSONDecoder.restorix.decode(AppSettings.self, from: previousData)
+        let changes = legacySettingsChanges(from: previous, to: draft)
+        guard !changes.isEmpty else { return previous }
+
+        var applied: [(key: String, previousValue: String)] = []
+        var lastData = previousData
+        do {
+            for change in changes {
+                lastData = try await run(
+                    arguments: ["config", "set", change.key, change.value],
+                    executableURL: executableURL
+                )
+                applied.append((change.key, change.previousValue))
+            }
+        } catch {
+            for rollback in applied.reversed() {
+                _ = try? await run(
+                    arguments: ["config", "set", rollback.key, rollback.previousValue],
+                    executableURL: executableURL
+                )
+            }
+            throw error
+        }
+
+        return try JSONDecoder.restorix.decode(AppSettings.self, from: lastData)
+    }
+
+    private func legacySettingsChanges(
+        from settings: AppSettings,
+        to draft: SettingsDraft
+    ) -> [(key: String, value: String, previousValue: String)] {
+        let candidates = [
+            ("stale_hours", String(draft.staleHours), String(settings.staleHours)),
+            ("loose_matching", String(draft.looseMatching), String(settings.looseMatching)),
+            ("show_dock_icon", String(draft.showDockIcon), String(settings.showDockIcon)),
+            ("launch_at_login", String(draft.launchAtLogin), String(settings.launchAtLogin)),
+            ("notifications_enabled", String(draft.notificationsEnabled), String(settings.notificationsEnabled)),
+            // Keep this last so a configured executable path cannot change the CLI used mid-transaction.
+            ("cli_path", draft.cliPath, settings.cliPath)
+        ]
+        return candidates.filter { $0.1 != $0.2 }
     }
 
     private func run(
         arguments: [String],
         environment: [String: String] = [:],
         timeout: TimeInterval? = nil,
-        accepting acceptedExitCodes: Set<Int32> = [0]
+        accepting acceptedExitCodes: Set<Int32> = [0],
+        executableURL: URL? = nil
     ) async throws -> Data {
         let command = arguments.joined(separator: " ")
         let result = try await commandRunner.run(
-            executableURL: cliLocator.resolve(),
+            executableURL: executableURL ?? cliLocator.resolve(),
             arguments: arguments,
             environment: environment,
             timeout: timeout ?? defaultCommandTimeoutSeconds

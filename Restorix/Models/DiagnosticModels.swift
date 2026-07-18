@@ -4,6 +4,7 @@ enum DiagnosticCode: String, Codable, Hashable {
     case configLoadFailed = "config_load_failed"
     case dockerUnavailable = "docker_unavailable"
     case resticUnavailable = "restic_unavailable"
+    case resticCheckFailed = "restic_check_failed"
     case dockerContainerScanFailed = "docker_container_scan_failed"
     case dockerVolumeScanFailed = "docker_volume_scan_failed"
     case dockerVolumeInspectFailed = "docker_volume_inspect_failed"
@@ -25,6 +26,16 @@ enum DiagnosticCode: String, Codable, Hashable {
     case repositoryCoverageUnknown = "repository_coverage_unknown"
     case looseMatchingDisabled = "loose_matching_disabled"
     case generic
+
+    init(from decoder: Decoder) throws {
+        let value = try decoder.singleValueContainer().decode(String.self)
+        self = Self(rawValue: value) ?? .generic
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 
 struct DiagnosticContext: Codable, Hashable {
@@ -45,6 +56,39 @@ struct Diagnostic: Codable, Hashable, Identifiable {
     let code: DiagnosticCode
     let context: DiagnosticContext
     let message: String
+
+    private enum CodingKeys: String, CodingKey {
+        case code
+        case context
+        case message
+    }
+
+    init(code: DiagnosticCode, context: DiagnosticContext, message: String) {
+        self.code = code
+        self.context = context
+        self.message = message
+    }
+
+    init(from decoder: Decoder) throws {
+        if let legacyMessage = try? decoder.singleValueContainer().decode(String.self) {
+            code = .generic
+            context = DiagnosticContext()
+            message = legacyMessage
+            return
+        }
+
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        code = try container.decode(DiagnosticCode.self, forKey: .code)
+        context = try container.decodeIfPresent(DiagnosticContext.self, forKey: .context) ?? DiagnosticContext()
+        message = try container.decode(String.self, forKey: .message)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(code, forKey: .code)
+        try container.encode(context, forKey: .context)
+        try container.encode(message, forKey: .message)
+    }
 
     var id: String {
         "\(code.rawValue)|\(message)"
@@ -76,6 +120,11 @@ struct Diagnostic: Codable, Hashable, Identifiable {
             return "至少一个已启用仓库需要 restic，但当前没有安装 restic。"
         case .resticUnavailable:
             return "未安装 restic。可以使用 Homebrew 安装：brew install restic"
+        case .resticCheckFailed:
+            if let detail = context.detail {
+                return "restic 可执行文件检查失败：\(detail)"
+            }
+            return message
         case .backupVerificationUnconfigured:
             return "还没有配置已启用的备份仓库，因此 Restorix 可以列出 Docker volumes，但无法验证备份。"
         case .staleSnapshot:

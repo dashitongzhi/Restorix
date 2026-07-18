@@ -39,4 +39,3 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         }
     }
 }
-

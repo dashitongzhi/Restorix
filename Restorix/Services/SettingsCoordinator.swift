@@ -60,13 +60,15 @@ final class SettingsCoordinator {
     func commit(_ draft: SettingsDraft) async throws -> AppSettings {
         let previousLaunchAtLogin = systemPreferences.launchAtLoginEnabled
         let changedLaunchAtLogin = previousLaunchAtLogin != draft.launchAtLogin
+        var reconciledDraft = draft
 
         if changedLaunchAtLogin {
             try systemPreferences.setLaunchAtLogin(draft.launchAtLogin)
+            reconciledDraft.launchAtLogin = systemPreferences.launchAtLoginEnabled
         }
 
         do {
-            let settings = try await coreBridge.commitSettings(draft)
+            let settings = try await coreBridge.commitSettings(reconciledDraft)
             systemPreferences.applyDockIcon(settings.showDockIcon)
             return settings
         } catch {

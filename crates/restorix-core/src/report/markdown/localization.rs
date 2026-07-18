@@ -39,6 +39,10 @@ pub(super) fn localized_diagnostic(language: ReportLanguage, diagnostic: &Diagno
         DiagnosticCode::MissingExpectedHostname => "已启用仓库未配置预期快照主机名，因此 Restorix 无法证明此主机的备份覆盖。".to_string(),
         DiagnosticCode::ResticRequiredMissing => "至少一个已启用仓库需要 restic，但当前没有安装 restic。".to_string(),
         DiagnosticCode::ResticUnavailable => "未安装 restic。可以使用 Homebrew 安装：brew install restic".to_string(),
+        DiagnosticCode::ResticCheckFailed => match diagnostic.context.detail.as_deref() {
+            Some(detail) => format!("restic 可执行文件检查失败：{detail}"),
+            None => diagnostic.message.clone(),
+        },
         DiagnosticCode::BackupVerificationUnconfigured => "还没有配置已启用的备份仓库，因此 Restorix 可以列出 Docker volumes，但无法验证备份。".to_string(),
         DiagnosticCode::StaleSnapshot => format!(
             "最新匹配的 snapshot 已超过过期阈值（{} 小时）。",

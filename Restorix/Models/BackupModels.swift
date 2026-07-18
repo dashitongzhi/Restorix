@@ -29,7 +29,6 @@ struct BackupRepository: Codable, Identifiable {
         case updatedAt = "updated_at"
     }
 }
-
 struct BackupSnapshot: Codable, Identifiable {
     let id: String
     let repositoryId: String
@@ -51,4 +50,3 @@ struct BackupSnapshot: Codable, Identifiable {
         case tags
     }
 }
-

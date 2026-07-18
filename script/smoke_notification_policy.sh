@@ -17,7 +17,9 @@ xcrun swiftc \
   "$ROOT_DIR/Restorix/Models/Localization.swift" \
   "$ROOT_DIR/Restorix/Models/EnglishStrings.swift" \
   "$ROOT_DIR/Restorix/Models/SimplifiedChineseStrings.swift" \
-  "$ROOT_DIR/Restorix/Services/NotificationService.swift" \
+  "$ROOT_DIR/Restorix/Services/NotificationPolicy.swift" \
+  "$ROOT_DIR/Restorix/Services/NotificationAdapters.swift" \
+  "$ROOT_DIR/Restorix/Services/NotificationCoordinator.swift" \
   "$ROOT_DIR/script/NotificationPolicySmoke.swift" \
   -framework UserNotifications \
   -o "$SMOKE_BINARY"

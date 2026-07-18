@@ -14,7 +14,6 @@ struct DockerContainer: Codable, Identifiable {
     let running: Bool
     let volumes: [DockerVolumeMount]
 }
-
 struct DockerVolumeMount: Codable {
     let volumeName: String?
     let source: String
@@ -36,4 +35,3 @@ struct DockerVolume: Codable, Identifiable {
     let mountpoint: String
     let labels: [[String]]
 }
-

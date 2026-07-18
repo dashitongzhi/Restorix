@@ -7,7 +7,6 @@ enum HealthStatus: String, Codable {
     case Unknown
     case Error
 }
-
 enum MatchConfidence: String, Codable {
     case Exact
     case ParentPath
@@ -92,4 +91,3 @@ struct ScanResult: Codable {
         case errors
     }
 }
-

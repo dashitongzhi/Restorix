@@ -6,6 +6,7 @@ pub enum DiagnosticCode {
     ConfigLoadFailed,
     DockerUnavailable,
     ResticUnavailable,
+    ResticCheckFailed,
     DockerContainerScanFailed,
     DockerVolumeScanFailed,
     DockerVolumeInspectFailed,

@@ -48,8 +48,13 @@ fn scan_with_sources(
         ));
     }
     if let Some(message) = &restic_status.message {
+        let code = if restic_status.installed {
+            DiagnosticCode::ResticCheckFailed
+        } else {
+            DiagnosticCode::ResticUnavailable
+        };
         warnings.push(Diagnostic::with_detail(
-            DiagnosticCode::ResticUnavailable,
+            code,
             message.clone(),
             message.clone(),
         ));

@@ -19,7 +19,6 @@ struct AppSettings: Codable {
         case repositories
     }
 }
-
 struct SettingsDraft: Codable, Equatable {
     var staleHours: Int
     var looseMatching: Bool
@@ -64,4 +63,3 @@ struct SettingsDraft: Codable, Equatable {
         case cliPath = "cli_path"
     }
 }
-

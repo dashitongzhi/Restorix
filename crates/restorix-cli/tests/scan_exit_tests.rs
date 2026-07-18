@@ -93,3 +93,36 @@ fn config_commit_accepts_one_typed_settings_payload() {
 
     let _ = std::fs::remove_file(config_path);
 }
+
+#[test]
+fn legacy_config_set_remains_a_compatibility_adapter() {
+    let config_path = std::env::temp_dir().join(format!(
+        "restorix-config-set-test-{}-{}.json",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+
+    let first = Command::new(env!("CARGO_BIN_EXE_restorix"))
+        .args(["config", "set", "stale_hours", "48"])
+        .env("RESTORIX_CONFIG", &config_path)
+        .output()
+        .unwrap();
+    assert!(first.status.success());
+
+    let second = Command::new(env!("CARGO_BIN_EXE_restorix"))
+        .args(["config", "set", "notifications_enabled", "yes"])
+        .env("RESTORIX_CONFIG", &config_path)
+        .output()
+        .unwrap();
+    assert!(second.status.success());
+
+    let config: serde_json::Value = serde_json::from_slice(&second.stdout).unwrap();
+    assert_eq!(config["stale_hours"], 48);
+    assert_eq!(config["notifications_enabled"], true);
+    assert_eq!(config["show_dock_icon"], true);
+
+    let _ = std::fs::remove_file(config_path);
+}

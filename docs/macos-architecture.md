@@ -8,9 +8,9 @@ The app does not parse Docker or restic output directly. It calls the bundled `r
 
 `scan --json` and `report markdown` accept exit codes `0` and `2`. Exit code `2` means the CLI produced a valid result containing hard diagnostics, so the macOS app must preserve and display that payload instead of discarding it as a transport failure.
 
-Diagnostics cross the CLI interface as a stable `code`, structured `context`, and fallback `message`. Rust health policy owns diagnostic identity; Markdown and Swift are rendering adapters. Wording changes therefore do not change diagnostic behavior.
+Diagnostics cross the CLI interface as a stable `code`, structured `context`, and fallback `message`. Rust health policy owns diagnostic identity; Markdown and Swift are rendering adapters. Wording changes therefore do not change diagnostic behavior. The Swift decoder accepts legacy string diagnostics and maps unknown future codes to `generic`, allowing a configured older or newer CLI to degrade without breaking the full scan payload.
 
-`SettingsCoordinator` exposes one typed settings commit. It validates and persists all settings through one Rust config transaction, applies launch-at-login and Dock preferences, and rolls back launch-at-login when persistence fails.
+`SettingsCoordinator` exposes one typed settings commit. It validates and persists all settings through one Rust config transaction, applies launch-at-login and Dock preferences, and rolls back launch-at-login when persistence fails. New CLIs retain a hidden `config set` adapter for older clients; `CoreBridge` uses that legacy path only when a configured older CLI explicitly rejects `config commit`, with best-effort rollback of already-applied legacy fields.
 
 `AppWorkflow` owns scan/repository sequencing and post-mutation refresh. `AppViewModel` owns observable state and forwards user intent through that interface. `NotificationPolicy` and `VolumeRiskPolicy` are pure rules; delivery, history and time are adapters. `MarkdownReportRenderer`, dashboard recommendations, and menu-bar presentation are pure rendering modules.
 
