@@ -1,0 +1,114 @@
+[
+  {
+    "text": "备份任务运行过，不等于数据真的可恢复。",
+    "startMs": 100,
+    "endMs": 3944,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "真正危险的，是那些直到恢复当天才暴露的路径漂移、过期快照和遗漏卷。",
+    "startMs": 3894,
+    "endMs": 10877,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "Restorix 把当前 Mac 上的 Docker volumes，与真实 restic snapshots 逐一比对。",
+    "startMs": 10877,
+    "endMs": 17608,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "它检查路径、主机名和时间阈值，把模糊的“应该备份了”，变成可以解释的状态。",
+    "startMs": 17608,
+    "endMs": 24675,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "在仪表盘里，已保护、未保护、已过期、未知和错误一目了然。",
+    "startMs": 24675,
+    "endMs": 30937,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "Docker、restic、容器和 volumes 的环境状态，也会同时给出。",
+    "startMs": 30937,
+    "endMs": 36538,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "Restorix 不执行备份，也不替代 restic。",
+    "startMs": 36538,
+    "endMs": 40456,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "它是一层独立的验证工具，只回答一个关键问题：这些 Docker 数据，最近是否被足够新的快照覆盖。",
+    "startMs": 40456,
+    "endMs": 48942,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "你可以添加多个 restic 仓库，指定预期快照主机名，并在本机测试仓库连接。",
+    "startMs": 48942,
+    "endMs": 55901,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "密码仍然由环境变量和 macOS 钥匙串管理。",
+    "startMs": 55901,
+    "endMs": 60336,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "扫描结果可以生成 Markdown 健康报告，方便审计、事故记录和团队交接。",
+    "startMs": 60336,
+    "endMs": 67247,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "复制、保存，再把风险和下一步动作交给真正需要处理的人。",
+    "startMs": 67247,
+    "endMs": 72836,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "应用支持简体中文、菜单栏快速查看、可调的过期阈值，以及多套图标。",
+    "startMs": 72836,
+    "endMs": 79639,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "底层 Rust Core 与 macOS 界面使用同一套健康模型。",
+    "startMs": 79639,
+    "endMs": 84495,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "在真正恢复之前，先知道风险在哪里。",
+    "startMs": 84495,
+    "endMs": 88125,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "Restorix，让 Docker volume 的备份状态有证据、可解释、可行动。",
+    "startMs": 88125,
+    "endMs": 94194,
+    "timestampMs": null,
+    "confidence": null
+  }
+]
