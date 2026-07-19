@@ -2,46 +2,28 @@
 
 生成方式：Codex 内置 `image_gen`。
 
-## data-vault.png
+## homelab-workbench.png（当前使用）
 
-Use case: ads-marketing
+Use case: photorealistic-natural
 
-Asset type: 16:9 cinematic background for a macOS backup verification product promo
+Asset type: restrained background plate for a macOS product demo video
 
-Primary request: a restrained, premium visualization of a dark data vault with physical server storage, layered archive disks, and one precise scanning arc moving through the scene
+Primary request: an honest, documentary-style close-up of a small self-hosted backup setup on a real workbench: a compact black NAS, two plain external drives, a few neatly routed cables, and the corner of a generic laptop visible out of focus
 
-Scene/backdrop: deep charcoal technical environment, subtle depth, no visible room branding
+Scene/backdrop: ordinary home-lab or small studio workspace, believable scale and slight signs of real use
 
-Subject: realistic metallic storage arrays and archival media connected by a single teal-cyan verification path
+Style/medium: natural editorial photography, realistic materials and imperfections, no concept-art styling
 
-Style/medium: photorealistic product cinematography, high-end industrial macro, believable materials
+Composition/framing: wide 16:9 frame, hardware concentrated on the right half, calm negative space on the left for title copy, eye-level camera
 
-Composition/framing: wide 16:9, strong negative space in the upper-left and center-left for overlaid Chinese headline, focal hardware on the right half
+Lighting/mood: soft overcast window light, low contrast, quiet and practical
 
-Lighting/mood: quiet, trustworthy, diagnostic, controlled rim light, no dramatic sci-fi spectacle
+Color palette: neutral charcoal, muted gray, restrained teal only from one tiny status LED
 
-Color palette: cold graphite, steel, restrained teal-cyan, tiny warm amber reflection only
+Constraints: no text, no logos, no people, no app interface, no dramatic data trails, no glowing cables, no holograms, no floating particles, no futuristic server room, no pristine CGI showroom, no watermark
 
-Constraints: no text, no letters, no logo, no user interface, no screens, no people, no watermark, no purple gradients, no neon glow, no fake dashboard
+二次编辑：移除电脑外壳上的可识别品牌标志，其余构图与光线保持不变。
 
-## volume-snapshot-map.png
+## 旧版素材（成片已停用）
 
-Use case: ads-marketing
-
-Asset type: 16:9 cinematic transition image for a backup verification explainer
-
-Primary request: visualize the comparison between Docker data volumes and timestamped backup snapshots as physical objects, without showing software UI
-
-Scene/backdrop: clean dark graphite tabletop fading into a neutral technical background
-
-Subject: three matte cylindrical storage volumes on the left and three precise translucent archival snapshot layers on the right, connected by thin teal verification paths; one path carries a restrained amber warning marker
-
-Style/medium: high-end 3D product render with photorealistic material detail, minimal industrial design
-
-Composition/framing: wide 16:9, centered diagonal flow from lower-left to upper-right, generous empty margins for animated labels added later in Remotion
-
-Lighting/mood: calm, analytical, trustworthy, soft directional light, crisp silhouettes
-
-Color palette: graphite, steel gray, teal-cyan verification lines, one small amber accent
-
-Constraints: no text, no letters, no logo, no screens, no user interface, no people, no watermark, no purple, no excessive glow, no fake dashboard, no fantasy server room
+`data-vault.png` 与 `volume-snapshot-map.png` 来自初版探索。新版成片已停用这两张偏概念化的画面，只保留文件用于追溯旧版工程。

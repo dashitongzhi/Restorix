@@ -1,6 +1,6 @@
 # Restorix 宣传演示视频
 
-该目录包含可编辑的 Remotion 工程、真实 Restorix macOS 截图、两张生成式辅助视觉素材、中文神经语音旁白和最终 1080p 成片。
+该目录包含可编辑的 Remotion 工程、真实 Restorix macOS 截图、一张生成式环境背景、中文神经语音旁白和最终 1080p 成片。
 
 ## 交付物
 
@@ -12,7 +12,7 @@
 
 - 1920 × 1080
 - 30 fps
-- 约 96 秒
+- 约 83 秒
 - H.264 视频 + AAC 立体声音轨
 - Remotion composition：`RestorixPromo`
 
@@ -30,7 +30,7 @@
 
 `project/public/screenshots/` 内的界面均来自当前仓库刚刚构建运行的真实 `Restorix.app`。首页素材只保留健康状态与建议区域，已裁除包含本机路径的诊断文本。
 
-生成图片仅承担开场氛围与抽象比对转场，不承担产品界面或功能证明。完整提示词位于 `project/public/generated/PROMPTS.md`。
+生成图片只在开场和收尾承担环境背景，不承担产品界面或功能证明。中段演示均使用真实应用截图。完整提示词位于 `project/public/generated/PROMPTS.md`。
 
 ## 编辑与渲染
 

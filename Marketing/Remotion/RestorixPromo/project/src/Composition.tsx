@@ -6,13 +6,13 @@ export const MyComposition: React.FC = () => {
     <Composition
       id="RestorixPromo"
       component={RestorixPromo}
-      durationInFrames={2880}
+      durationInFrames={2475}
       fps={30}
       width={1920}
       height={1080}
       defaultProps={{
         title: "Restorix",
-        tagline: "让 Docker volume 的备份状态有证据、可解释、可行动。",
+        tagline: "检查 Docker volume 的备份覆盖情况",
       }}
     />
   );

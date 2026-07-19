@@ -116,12 +116,12 @@ const OpeningScene: React.FC<SceneProps> = ({durationInFrames}) => {
   return (
     <AbsoluteFill style={{opacity: sceneOpacity(frame, durationInFrames)}}>
       <Img
-        src={staticFile("generated/data-vault.png")}
+        src={staticFile("generated/homelab-workbench.png")}
         style={{
           width: "100%",
           height: "100%",
           objectFit: "cover",
-          scale: interpolate(frame, [0, durationInFrames], [1.02, 1.09], {
+          scale: interpolate(frame, [0, durationInFrames], [1.01, 1.05], {
             extrapolateLeft: "clamp",
             extrapolateRight: "clamp",
           }),
@@ -130,7 +130,7 @@ const OpeningScene: React.FC<SceneProps> = ({durationInFrames}) => {
       <AbsoluteFill
         style={{
           background:
-            "linear-gradient(90deg, rgba(6,10,13,0.98) 0%, rgba(6,10,13,0.86) 38%, rgba(6,10,13,0.18) 72%, rgba(6,10,13,0.42) 100%)",
+            "linear-gradient(90deg, rgba(6,10,13,0.96) 0%, rgba(6,10,13,0.82) 42%, rgba(6,10,13,0.18) 76%, rgba(6,10,13,0.28) 100%)",
         }}
       />
       <div
@@ -164,9 +164,9 @@ const OpeningScene: React.FC<SceneProps> = ({durationInFrames}) => {
             letterSpacing: -5,
           }}
         >
-          备份运行过。
+          备份跑完了。
           <br />
-          真的可恢复吗？
+          恢复前，先检查。
         </div>
         <div
           style={{
@@ -176,7 +176,9 @@ const OpeningScene: React.FC<SceneProps> = ({durationInFrames}) => {
             width: 820,
           }}
         >
-          面向自托管 Docker volumes 的备份可信度检查器
+          检查 Docker volume 的快照覆盖
+          <br />
+          并确认快照时间
         </div>
       </div>
     </AbsoluteFill>
@@ -185,6 +187,7 @@ const OpeningScene: React.FC<SceneProps> = ({durationInFrames}) => {
 
 const CompareScene: React.FC<SceneProps> = ({durationInFrames}) => {
   const frame = useCurrentFrame();
+  const checks = ["路径", "快照主机名", "时间"];
   return (
     <AbsoluteFill
       style={{
@@ -192,25 +195,6 @@ const CompareScene: React.FC<SceneProps> = ({durationInFrames}) => {
         opacity: sceneOpacity(frame, durationInFrames),
       }}
     >
-      <Img
-        src={staticFile("generated/volume-snapshot-map.png")}
-        style={{
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          opacity: 0.74,
-          scale: interpolate(frame, [0, durationInFrames], [1.04, 1.1], {
-            extrapolateLeft: "clamp",
-            extrapolateRight: "clamp",
-          }),
-        }}
-      />
-      <AbsoluteFill
-        style={{
-          background:
-            "linear-gradient(180deg, rgba(8,12,15,0.78) 0%, rgba(8,12,15,0.05) 45%, rgba(8,12,15,0.74) 100%)",
-        }}
-      />
       <div
         style={{
           position: "absolute",
@@ -218,44 +202,99 @@ const CompareScene: React.FC<SceneProps> = ({durationInFrames}) => {
           right: 110,
           top: 92,
           display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          gap: 80,
+          flexDirection: "column",
+          gap: 18,
         }}
       >
-        <div style={{display: "flex", flexDirection: "column", gap: 20}}>
-          <Eyebrow>真实状态比对</Eyebrow>
-          <div
-            style={{
-              color: COLORS.text,
-              fontSize: 78,
-              lineHeight: 1.08,
-              fontWeight: 740,
-              letterSpacing: -3,
-              maxWidth: 1020,
-            }}
-          >
-            逐卷核对路径、主机名与时间阈值
+        <Eyebrow>检查过程</Eyebrow>
+        <div
+          style={{
+            color: COLORS.text,
+            fontSize: 76,
+            lineHeight: 1.08,
+            fontWeight: 740,
+            letterSpacing: -3,
+          }}
+        >
+          当前 volume 和最近快照，逐项核对
+        </div>
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          left: 150,
+          right: 150,
+          top: 340,
+          display: "grid",
+          gridTemplateColumns: "1fr 410px 1fr",
+          alignItems: "center",
+          gap: 54,
+        }}
+      >
+        <div
+          style={{
+            minHeight: 330,
+            padding: "58px 54px",
+            border: `1px solid ${COLORS.line}`,
+            borderRadius: 30,
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            gap: 28,
+            backgroundColor: COLORS.panel,
+          }}
+        >
+          <HardDrives size={68} weight="duotone" color={COLORS.teal} />
+          <div style={{color: COLORS.text, fontSize: 48, fontWeight: 700}}>
+            Docker volumes
           </div>
+          <div style={{color: COLORS.muted, fontSize: 31, lineHeight: 1.45}}>
+            读取当前 Mac 上的 volume 列表
+          </div>
+        </div>
+        <div style={{display: "flex", flexDirection: "column", gap: 22}}>
+          {checks.map((check, index) => (
+            <div
+              key={check}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 18,
+                color: COLORS.text,
+                fontSize: 31,
+                opacity: interpolate(frame, [28 + index * 12, 52 + index * 12], [0, 1], {
+                  extrapolateLeft: "clamp",
+                  extrapolateRight: "clamp",
+                }),
+              }}
+            >
+              <span style={{color: COLORS.muted}}>检查</span>
+              <span style={{fontWeight: 700}}>{check}</span>
+              <span style={{color: COLORS.teal}}>→</span>
+            </div>
+          ))}
         </div>
         <div
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 18,
-            padding: "18px 24px",
-            borderRadius: 18,
+            minHeight: 330,
+            padding: "58px 54px",
             border: `1px solid ${COLORS.line}`,
-            backgroundColor: "rgba(9,15,19,0.72)",
-            color: COLORS.text,
-            fontSize: 30,
-            fontWeight: 650,
+            borderRadius: 30,
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            gap: 28,
+            backgroundColor: COLORS.panel,
           }}
         >
-          <HardDrives size={38} weight="duotone" color={COLORS.teal} />
-          Docker volumes
-          <span style={{color: COLORS.muted}}>→</span>
-          restic snapshots
+          <Database size={68} weight="duotone" color={COLORS.amber} />
+          <div style={{color: COLORS.text, fontSize: 48, fontWeight: 700}}>
+            restic snapshots
+          </div>
+          <div style={{color: COLORS.muted, fontSize: 31, lineHeight: 1.45}}>
+            查找对应且足够新的快照
+          </div>
         </div>
       </div>
     </AbsoluteFill>
@@ -278,7 +317,7 @@ const DashboardScene: React.FC<SceneProps> = ({durationInFrames}) => {
       }}
     >
       <div style={{display: "flex", flexDirection: "column", gap: 26}}>
-        <Eyebrow>一眼看到风险</Eyebrow>
+        <Eyebrow>首页</Eyebrow>
         <div
           style={{
             color: COLORS.text,
@@ -288,12 +327,12 @@ const DashboardScene: React.FC<SceneProps> = ({durationInFrames}) => {
             letterSpacing: -3,
           }}
         >
-          状态清楚。
+          每个状态
           <br />
-          原因也清楚。
+          分开看。
         </div>
         <div style={{color: COLORS.muted, fontSize: 36, lineHeight: 1.48}}>
-          Protected、Unprotected、Stale、Unknown 与 Error，使用同一套健康模型。
+          受保护、未保护、已过期、未知与错误，以及 Docker 和 restic 的连接情况。
         </div>
       </div>
       <ScreenshotFrame src="screenshots/dashboard-health.png" width={1210} rotate={-1.2} />
@@ -304,9 +343,9 @@ const DashboardScene: React.FC<SceneProps> = ({durationInFrames}) => {
 const BoundaryScene: React.FC<SceneProps> = ({durationInFrames}) => {
   const frame = useCurrentFrame();
   const facts = [
-    {icon: Database, text: "扫描 Docker 与 restic 的真实状态"},
-    {icon: ShieldCheck, text: "验证最近快照是否覆盖 volume"},
-    {icon: FileText, text: "给出原因、风险与下一步动作"},
+    {icon: Database, text: "沿用现有 restic 仓库与备份流程"},
+    {icon: ShieldCheck, text: "读取当前状态并检查快照覆盖"},
+    {icon: FileText, text: "把检查结果留在本机"},
   ];
   return (
     <AbsoluteFill
@@ -321,7 +360,7 @@ const BoundaryScene: React.FC<SceneProps> = ({durationInFrames}) => {
       }}
     >
       <div style={{display: "flex", flexDirection: "column", gap: 30}}>
-        <Eyebrow>产品边界</Eyebrow>
+        <Eyebrow>分工</Eyebrow>
         <div
           style={{
             color: COLORS.text,
@@ -331,9 +370,9 @@ const BoundaryScene: React.FC<SceneProps> = ({durationInFrames}) => {
             letterSpacing: -3,
           }}
         >
-          不是备份工具。
+          备份照常运行。
           <br />
-          是独立验证层。
+          Restorix 负责检查。
         </div>
         <div style={{display: "flex", flexDirection: "column", gap: 18}}>
           {facts.map(({icon: Icon, text}, index) => (
@@ -387,7 +426,7 @@ const RepositoryScene: React.FC<SceneProps> = ({durationInFrames}) => {
         }}
       >
         <div style={{display: "flex", flexDirection: "column", gap: 18}}>
-          <Eyebrow>仓库与凭据</Eyebrow>
+          <Eyebrow>仓库设置</Eyebrow>
           <div
             style={{
               color: COLORS.text,
@@ -396,11 +435,11 @@ const RepositoryScene: React.FC<SceneProps> = ({durationInFrames}) => {
               letterSpacing: -3,
             }}
           >
-            配置仓库。保留凭据边界。
+            连接现有 restic 仓库
           </div>
         </div>
         <div style={{color: COLORS.muted, fontSize: 31, maxWidth: 640, lineHeight: 1.42}}>
-          指定预期快照主机名。本地测试连接，密码由环境变量与 macOS 钥匙串管理。
+          可指定预期快照主机名，并在本机测试连接。密码继续由环境变量与 macOS 钥匙串管理。
         </div>
       </div>
       <div
@@ -463,7 +502,7 @@ const ReportScene: React.FC<SceneProps> = ({durationInFrames}) => {
     >
       <ScreenshotFrame src="screenshots/report-empty.png" width={1050} rotate={-0.8} />
       <div style={{display: "flex", flexDirection: "column", gap: 26}}>
-        <Eyebrow>Markdown 报告</Eyebrow>
+        <Eyebrow>报告</Eyebrow>
         <div
           style={{
             color: COLORS.text,
@@ -473,10 +512,12 @@ const ReportScene: React.FC<SceneProps> = ({durationInFrames}) => {
             letterSpacing: -3,
           }}
         >
-          审计、记录、交接，都有同一份证据。
+          扫描结果
+          <br />
+          可以直接保存
         </div>
         <div style={{color: COLORS.muted, fontSize: 34, lineHeight: 1.46}}>
-          复制或保存报告，把风险、原因与恢复提示带进实际运维流程。
+          Markdown 报告会保留状态、原因和恢复提示，便于巡检留档与团队交接。
         </div>
       </div>
     </AbsoluteFill>
@@ -499,7 +540,7 @@ const NativeScene: React.FC<SceneProps> = ({durationInFrames}) => {
       }}
     >
       <div style={{display: "flex", flexDirection: "column", gap: 26}}>
-        <Eyebrow>macOS 原生体验</Eyebrow>
+        <Eyebrow>日常使用</Eyebrow>
         <div
           style={{
             color: COLORS.text,
@@ -509,12 +550,12 @@ const NativeScene: React.FC<SceneProps> = ({durationInFrames}) => {
             letterSpacing: -3,
           }}
         >
-          界面可配置。
+          菜单栏里
           <br />
-          核心保持一致。
+          快速看状态。
         </div>
         <div style={{color: COLORS.muted, fontSize: 33, lineHeight: 1.48}}>
-          简体中文、菜单栏状态、过期阈值与多套图标。SwiftUI 与 Rust Core 共享同一健康模型。
+          过期阈值、界面语言与图标都能调整。SwiftUI 界面和 Rust Core 使用同一套判断逻辑。
         </div>
       </div>
       <ScreenshotFrame src="screenshots/settings-icons.png" width={1240} rotate={0.9} />
@@ -531,12 +572,12 @@ const ClosingScene: React.FC<SceneProps & PromoProps> = ({
   return (
     <AbsoluteFill style={{opacity: sceneOpacity(frame, durationInFrames)}}>
       <Img
-        src={staticFile("generated/data-vault.png")}
+        src={staticFile("generated/homelab-workbench.png")}
         style={{
           width: "100%",
           height: "100%",
           objectFit: "cover",
-          scale: interpolate(frame, [0, durationInFrames], [1.08, 1.03], {
+          scale: interpolate(frame, [0, durationInFrames], [1.04, 1.01], {
             extrapolateLeft: "clamp",
             extrapolateRight: "clamp",
           }),
@@ -545,7 +586,7 @@ const ClosingScene: React.FC<SceneProps & PromoProps> = ({
       <AbsoluteFill
         style={{
           background:
-            "linear-gradient(90deg, rgba(6,10,13,0.98) 0%, rgba(6,10,13,0.88) 48%, rgba(6,10,13,0.46) 100%)",
+            "linear-gradient(90deg, rgba(6,10,13,0.97) 0%, rgba(6,10,13,0.88) 50%, rgba(6,10,13,0.34) 100%)",
         }}
       />
       <div
@@ -595,28 +636,10 @@ const ClosingScene: React.FC<SceneProps & PromoProps> = ({
             lineHeight: 1.2,
           }}
         >
-          先验证，再信任恢复。
+          恢复前，先查一遍。
         </div>
         <div style={{color: COLORS.muted, fontSize: 36, lineHeight: 1.48}}>
           {tagline}
-        </div>
-        <div style={{display: "flex", gap: 20, marginTop: 10}}>
-          {["有证据", "可解释", "可行动"].map((item, index) => (
-            <div
-              key={item}
-              style={{
-                padding: "14px 22px",
-                borderRadius: 14,
-                border: `1px solid ${index === 1 ? "rgba(47,198,195,0.54)" : COLORS.line}`,
-                backgroundColor: "rgba(10,15,19,0.72)",
-                color: index === 1 ? COLORS.teal : COLORS.text,
-                fontSize: 28,
-                fontWeight: 650,
-              }}
-            >
-              {item}
-            </div>
-          ))}
         </div>
       </div>
     </AbsoluteFill>
@@ -679,30 +702,30 @@ export const RestorixPromo: React.FC<PromoProps> = ({title, tagline}) => {
       <Audio src={staticFile("audio/ambient.m4a")} volume={0.78} />
       <Audio src={staticFile("audio/narration.mp3")} volume={1} />
 
-      <Sequence durationInFrames={326}>
-        <OpeningScene durationInFrames={326} />
+      <Sequence durationInFrames={293}>
+        <OpeningScene durationInFrames={293} />
       </Sequence>
-      <Sequence from={326} durationInFrames={414}>
-        <CompareScene durationInFrames={414} />
+      <Sequence from={293} durationInFrames={393}>
+        <CompareScene durationInFrames={393} />
       </Sequence>
-      <Sequence from={740} durationInFrames={356}>
-        <DashboardScene durationInFrames={356} />
+      <Sequence from={686} durationInFrames={323}>
+        <DashboardScene durationInFrames={323} />
       </Sequence>
-      <Sequence from={1096} durationInFrames={373}>
-        <BoundaryScene durationInFrames={373} />
+      <Sequence from={1009} durationInFrames={303}>
+        <BoundaryScene durationInFrames={303} />
       </Sequence>
-      <Sequence from={1469} durationInFrames={341}>
-        <RepositoryScene durationInFrames={341} />
+      <Sequence from={1312} durationInFrames={354}>
+        <RepositoryScene durationInFrames={354} />
       </Sequence>
-      <Sequence from={1810} durationInFrames={375}>
-        <ReportScene durationInFrames={375} />
+      <Sequence from={1666} durationInFrames={301}>
+        <ReportScene durationInFrames={301} />
       </Sequence>
-      <Sequence from={2185} durationInFrames={350}>
-        <NativeScene durationInFrames={350} />
+      <Sequence from={1967} durationInFrames={337}>
+        <NativeScene durationInFrames={337} />
       </Sequence>
-      <Sequence from={2535} durationInFrames={345}>
+      <Sequence from={2304} durationInFrames={171}>
         <ClosingScene
-          durationInFrames={345}
+          durationInFrames={171}
           title={title}
           tagline={tagline}
         />
