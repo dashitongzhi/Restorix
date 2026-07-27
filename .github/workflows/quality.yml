@@ -1,0 +1,66 @@
+name: Reusable Quality Gates
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Rust, shell, Swift smoke, and Debug build
+    runs-on: macos-26
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Select stable Rust with Clippy
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy
+          rustup default stable
+
+      - name: Cache Cargo output
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-quality-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-quality-cargo-
+
+      - name: Install ShellCheck
+        run: brew install shellcheck
+
+      - name: Run Rust tests
+        run: cargo test
+
+      - name: Run Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run ShellCheck
+        run: shellcheck script/*.sh script/lib/*.sh script/fixtures/*.sh
+
+      - name: Run Swift and packaging smoke scripts
+        run: |
+          bash script/smoke_cli_command_runner.sh
+          bash script/smoke_app_workflow.sh
+          bash script/smoke_notification_policy.sh
+          bash script/smoke_settings_coordinator.sh
+          bash script/smoke_package_security.sh
+
+      - name: Build Debug app
+        env:
+          DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+        run: |
+          xcodebuild \
+            -project Restorix.xcodeproj \
+            -scheme Restorix \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            build

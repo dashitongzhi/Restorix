@@ -51,6 +51,7 @@ fn scan_result() -> ScanResult {
     };
 
     ScanResult {
+        schema_version: 1,
         summary: ScanSummary {
             scanned_at: "2026-05-15T10:00:00Z".to_string(),
             platform: Platform::MacOS,

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-github_env="${GITHUB_ENV:-}"
+github_output="${GITHUB_OUTPUT:-}"
 github_ref="${GITHUB_REF:-}"
 allow_unsigned="${RESTORIX_ALLOW_UNSIGNED_CI_ARTIFACTS:-false}"
 
@@ -25,23 +25,24 @@ truthy() {
   esac
 }
 
-write_env() {
-  local name="$1"
-  local value="$2"
+write_policy_value() {
+  local output_name="$1"
+  local env_name="$2"
+  local value="$3"
 
-  if [[ -n "$github_env" ]]; then
-    printf '%s=%s\n' "$name" "$value" >> "$github_env"
+  if [[ -n "$github_output" ]]; then
+    printf '%s=%s\n' "$output_name" "$value" >> "$github_output"
   else
-    printf 'export %s=%q\n' "$name" "$value"
+    printf 'export %s=%q\n' "$env_name" "$value"
   fi
 }
 
 configure_unsigned_ci_artifacts() {
-  write_env RESTORIX_PACKAGE_MODE local
-  write_env RESTORIX_NOTARIZE 0
-  write_env RESTORIX_STAPLE 0
-  write_env RESTORIX_GATEKEEPER_VERIFY 0
-  write_env RESTORIX_XCODEBUILD_CODE_SIGNING_ALLOWED NO
+  write_policy_value package_mode RESTORIX_PACKAGE_MODE local
+  write_policy_value notarize RESTORIX_NOTARIZE 0
+  write_policy_value staple RESTORIX_STAPLE 0
+  write_policy_value gatekeeper_verify RESTORIX_GATEKEEPER_VERIFY 0
+  write_policy_value xcodebuild_code_signing_allowed RESTORIX_XCODEBUILD_CODE_SIGNING_ALLOWED NO
 }
 
 if [[ "$is_public_v_release" != true ]] && truthy "$allow_unsigned"; then
@@ -76,15 +77,10 @@ if [[ -z "$notary_apple_id" || -z "$notary_password" || -z "$notary_team_id" ]];
   exit 2
 fi
 
-write_env RESTORIX_PACKAGE_MODE developer-id
-write_env RESTORIX_DEVELOPER_ID_APPLICATION "$developer_id_application"
-write_env RESTORIX_DEVELOPMENT_TEAM "${development_team:-$notary_team_id}"
-write_env RESTORIX_NOTARY_APPLE_ID "$notary_apple_id"
-write_env RESTORIX_NOTARY_PASSWORD "$notary_password"
-write_env RESTORIX_NOTARY_TEAM_ID "$notary_team_id"
-write_env RESTORIX_NOTARIZE 1
-write_env RESTORIX_STAPLE 1
-write_env RESTORIX_GATEKEEPER_VERIFY 1
-write_env RESTORIX_XCODEBUILD_CODE_SIGNING_ALLOWED YES
+write_policy_value package_mode RESTORIX_PACKAGE_MODE developer-id
+write_policy_value notarize RESTORIX_NOTARIZE 1
+write_policy_value staple RESTORIX_STAPLE 1
+write_policy_value gatekeeper_verify RESTORIX_GATEKEEPER_VERIFY 1
+write_policy_value xcodebuild_code_signing_allowed RESTORIX_XCODEBUILD_CODE_SIGNING_ALLOWED YES
 
 echo "Developer ID signing and notarization are configured for release packaging."

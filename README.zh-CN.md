@@ -210,7 +210,7 @@ Unsigned artifacts 只保留给 maintainer 显式触发的 smoke run：使用 `w
 
 ## 维护者自动化
 
-Codex PR review 会在非 draft pull request 上自动运行。仓库 owner、member 和 collaborator 也可以在非 draft PR 评论里发送下面这条精确命令来手动重新触发：
+Codex PR review 会在本仓库和可信仓库贡献者提交的非 draft pull request 上自动运行。外部 fork 需要 maintainer 添加 `codex-review-approved` 标签后才会运行自动审查。仓库 owner、member 和 collaborator 也可以在非 draft PR 评论里发送下面这条精确命令来手动重新触发：
 
 ```text
 /codex-review
@@ -258,8 +258,19 @@ script/                Build, run, package, and smoke verification scripts
 ```bash
 cargo test
 
+cargo clippy --workspace --all-targets -- -D warnings
+
+shellcheck script/*.sh script/lib/*.sh script/fixtures/*.sh
+
+bash script/smoke_cli_command_runner.sh
+bash script/smoke_app_workflow.sh
+bash script/smoke_notification_policy.sh
+bash script/smoke_settings_coordinator.sh
+bash script/smoke_package_security.sh
+
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-  xcodebuild -list -project Restorix.xcodeproj
+  xcodebuild -project Restorix.xcodeproj -scheme Restorix \
+    -configuration Debug CODE_SIGNING_ALLOWED=NO build
 
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
   bash script/verify_release_package.sh

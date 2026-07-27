@@ -22,11 +22,14 @@ SMOKE_SOURCE="$ROOT_DIR/script/CLICommandRunnerSmoke.swift"
 SMOKE_SUPPORT_SOURCE="$ROOT_DIR/script/CLICommandRunnerSmokeSupport.swift"
 FIXTURE="$ROOT_DIR/script/fixtures/cli_command_fixture.sh"
 SMOKE_BINARY="$(mktemp "${TMPDIR:-/tmp}/restorix-cli-command-runner.XXXXXX")"
+CONTRACT_FIXTURE="$(mktemp "${TMPDIR:-/tmp}/restorix-scan-contract.XXXXXX")"
 
 cleanup() {
-  rm -f "$SMOKE_BINARY"
+  rm -f "$SMOKE_BINARY" "$CONTRACT_FIXTURE"
 }
 trap cleanup EXIT
+
+cargo run --quiet -p restorix-core --example scan_contract_fixture > "$CONTRACT_FIXTURE"
 
 xcrun swiftc \
   "$RUNNER_SOURCE" \
@@ -49,4 +52,4 @@ xcrun swiftc \
   "$SMOKE_SOURCE" \
   -framework Security \
   -o "$SMOKE_BINARY"
-"$SMOKE_BINARY" "$FIXTURE"
+"$SMOKE_BINARY" "$FIXTURE" "$CONTRACT_FIXTURE"

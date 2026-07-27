@@ -1,6 +1,8 @@
 use crate::diagnostic::Diagnostic;
 use serde::{Deserialize, Serialize};
 
+pub const SCAN_RESULT_SCHEMA_VERSION: u32 = 1;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Platform {
     MacOS,
@@ -119,6 +121,7 @@ pub struct ScanSummary {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanResult {
+    pub schema_version: u32,
     pub summary: ScanSummary,
     pub containers: Vec<DockerContainer>,
     pub volumes: Vec<DockerVolume>,

@@ -8,7 +8,8 @@ CONFIGURATION="Release"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DERIVED_DATA="$ROOT_DIR/build/PackageDerivedData"
 BUILD_APP="$DERIVED_DATA/Build/Products/$CONFIGURATION/$APP_NAME.app"
-CLI_SOURCE="$ROOT_DIR/target/release/restorix"
+CLI_ARM64_SOURCE="$ROOT_DIR/target/aarch64-apple-darwin/release/restorix"
+CLI_X86_64_SOURCE="$ROOT_DIR/target/x86_64-apple-darwin/release/restorix"
 CLI_DEST="$BUILD_APP/Contents/Resources/restorix"
 DIST_DIR="$ROOT_DIR/dist"
 DIST_APP="$DIST_DIR/$APP_NAME.app"
@@ -69,6 +70,8 @@ XCODEBUILD_COMMAND=(
   build
   "MARKETING_VERSION=${RESTORIX_MARKETING_VERSION}"
   "CURRENT_PROJECT_VERSION=${RESTORIX_BUILD_VERSION}"
+  "ARCHS=arm64 x86_64"
+  "ONLY_ACTIVE_ARCH=NO"
 )
 
 if [[ -n "${RESTORIX_XCODEBUILD_CODE_SIGNING_ALLOWED:-}" ]]; then
@@ -173,6 +176,8 @@ fi
 require_tool cargo
 require_tool ditto
 require_tool hdiutil
+require_tool lipo
+require_tool rustc
 require_tool xcrun
 require_tool /usr/bin/codesign
 
@@ -180,14 +185,33 @@ if truthy "$GATEKEEPER_VERIFY"; then
   require_tool /usr/sbin/spctl
 fi
 
-log "Building CLI and macOS app in $PACKAGE_MODE package mode."
+require_rust_target() {
+  local target="$1"
+  local target_libdir
+
+  target_libdir="$(rustc --print target-libdir --target "$target" 2>/dev/null)" || true
+  if [[ -z "$target_libdir" ]] || ! compgen -G "$target_libdir/libcore-*.rlib" >/dev/null; then
+    echo "Missing Rust target: $target" >&2
+    echo "Install it with a rustup-managed toolchain: rustup target add $target" >&2
+    exit 1
+  fi
+}
+
+require_rust_target aarch64-apple-darwin
+require_rust_target x86_64-apple-darwin
+
+log "Building universal CLI and macOS app in $PACKAGE_MODE package mode."
 log "Stamping Restorix ${RESTORIX_MARKETING_VERSION} (${RESTORIX_BUILD_VERSION})."
-cargo build --release -p restorix-cli
+cargo build --release -p restorix-cli --target aarch64-apple-darwin
+cargo build --release -p restorix-cli --target x86_64-apple-darwin
 
 "${XCODEBUILD_COMMAND[@]}"
 
 mkdir -p "$(dirname "$CLI_DEST")"
-cp "$CLI_SOURCE" "$CLI_DEST"
+lipo -create \
+  "$CLI_ARM64_SOURCE" \
+  "$CLI_X86_64_SOURCE" \
+  -output "$CLI_DEST"
 chmod +x "$CLI_DEST"
 
 sign_app_for_distribution

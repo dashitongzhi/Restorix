@@ -53,7 +53,11 @@ pub fn match_path(volume: &DockerVolume, snapshot_path: &str) -> MatchConfidence
     let snapshot = Path::new(&snapshot_path);
 
     if mount_path.starts_with(snapshot) {
-        return MatchConfidence::ParentPath;
+        return if normal_component_count(snapshot) == 0 {
+            MatchConfidence::Low
+        } else {
+            MatchConfidence::ParentPath
+        };
     }
 
     if snapshot.starts_with(mount_path) {
@@ -87,6 +91,12 @@ fn path_contains_component(path: &Path, name: &str) -> bool {
         Component::Normal(value) => value.to_string_lossy() == name,
         _ => false,
     })
+}
+
+fn normal_component_count(path: &Path) -> usize {
+    path.components()
+        .filter(|component| matches!(component, Component::Normal(_)))
+        .count()
 }
 
 fn confidence_rank(confidence: &MatchConfidence) -> u8 {

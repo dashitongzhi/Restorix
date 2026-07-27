@@ -17,8 +17,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  quality:
+    uses: ./.github/workflows/quality.yml
+
   macos:
     name: unsigned macOS package smoke
+    needs: quality
     # Keep this on the same Intel runner family as release.yml because the Docker smoke
     # path currently relies on docker/setup-docker-action support there.
     runs-on: macos-26-intel
@@ -32,15 +36,18 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Select stable Rust
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
       - name: Cache Cargo output
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.cargo/registry
@@ -55,7 +62,7 @@ jobs:
           brew install restic
 
       - name: Start Docker
-        uses: docker/setup-docker-action@v5
+        uses: docker/setup-docker-action@77e84dbf09b47d1e29270283c22f16145aa85ca1 # v5
 
       - name: Show tool versions
         run: |
@@ -83,7 +90,7 @@ jobs:
           fi
 
       - name: Upload unsigned smoke artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: Restorix-unsigned-smoke-${{ github.sha }}
           path: |

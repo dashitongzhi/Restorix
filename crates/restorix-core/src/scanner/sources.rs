@@ -37,7 +37,11 @@ impl DockerSource for DockerClient {
 
 pub(super) trait BackupSource {
     fn status(&self) -> ResticStatus;
-    fn snapshots(&self, repository: &BackupRepository) -> Result<Vec<BackupSnapshot>>;
+    fn snapshots(
+        &self,
+        repository: &BackupRepository,
+        credential_env_keys: &[String],
+    ) -> Result<Vec<BackupSnapshot>>;
 }
 
 impl BackupSource for ResticClient {
@@ -45,8 +49,12 @@ impl BackupSource for ResticClient {
         self.check()
     }
 
-    fn snapshots(&self, repository: &BackupRepository) -> Result<Vec<BackupSnapshot>> {
-        self.snapshots(repository)
+    fn snapshots(
+        &self,
+        repository: &BackupRepository,
+        credential_env_keys: &[String],
+    ) -> Result<Vec<BackupSnapshot>> {
+        self.snapshots_with_credential_keys(repository, credential_env_keys)
     }
 }
 

@@ -5,6 +5,16 @@ enum Platform: String, Codable {
     case Windows
     case Linux
     case Unknown
+
+    init(from decoder: Decoder) throws {
+        let value = try decoder.singleValueContainer().decode(String.self)
+        self = Self(rawValue: value) ?? .Unknown
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 struct DockerContainer: Codable, Identifiable {
     var id: String

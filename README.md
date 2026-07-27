@@ -204,7 +204,7 @@ Unsigned artifacts are reserved for explicit maintainer smoke runs: start `workf
 
 ## Maintainer Automation
 
-Codex PR review runs automatically on non-draft pull requests. Repository owners, members, and collaborators can also retrigger it from a non-draft pull request comment by posting exactly:
+Codex PR review runs automatically on non-draft pull requests from this repository and from trusted repository contributors. An external fork requires a maintainer to add the `codex-review-approved` label before the automated review can run. Repository owners, members, and collaborators can also retrigger it from a non-draft pull request comment by posting exactly:
 
 ```text
 /codex-review

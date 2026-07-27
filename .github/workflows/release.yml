@@ -20,23 +20,30 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  quality:
+    uses: ./.github/workflows/quality.yml
+
   macos:
     name: macOS package
+    needs: quality
     # docker/setup-docker-action uses Lima/QEMU and currently fails on macOS ARM runners.
     runs-on: macos-26-intel
     timeout-minutes: 75
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Select stable Rust
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
       - name: Cache Cargo output
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.cargo/registry
@@ -50,7 +57,11 @@ jobs:
         run: |
           brew install restic
 
+      - name: Start Docker
+        uses: docker/setup-docker-action@77e84dbf09b47d1e29270283c22f16145aa85ca1 # v5
+
       - name: Resolve release signing policy
+        id: signing_policy
         env:
           RESTORIX_ALLOW_UNSIGNED_CI_ARTIFACTS: ${{ github.event_name == 'workflow_dispatch' && inputs.unsigned_ci_artifacts }}
           MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64 }}
@@ -63,9 +74,11 @@ jobs:
         run: bash script/resolve_release_signing_policy.sh
 
       - name: Import Developer ID certificate
+        id: signing_keychain
         env:
           MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64 }}
           MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD }}
+          RESTORIX_PACKAGE_MODE: ${{ steps.signing_policy.outputs.package_mode }}
         run: |
           if [[ "${RESTORIX_PACKAGE_MODE:-local}" != "developer-id" ]]; then
             echo "Developer ID certificate import skipped for explicit unsigned CI artifacts."
@@ -97,12 +110,11 @@ jobs:
             -k "$signing_keychain_password" \
             "$signing_keychain"
 
-          echo "RESTORIX_SIGNING_KEYCHAIN=$signing_keychain" >> "$GITHUB_ENV"
-
-      - name: Start Docker
-        uses: docker/setup-docker-action@v5
+          echo "keychain=$signing_keychain" >> "$GITHUB_OUTPUT"
 
       - name: Show tool versions
+        env:
+          RESTORIX_PACKAGE_MODE: ${{ steps.signing_policy.outputs.package_mode }}
         run: |
           xcodebuild -version
           cargo --version
@@ -116,17 +128,30 @@ jobs:
         run: bash script/stamp_release_version.sh --check
 
       - name: Build package and run release verification
+        env:
+          RESTORIX_PACKAGE_MODE: ${{ steps.signing_policy.outputs.package_mode }}
+          RESTORIX_DEVELOPER_ID_APPLICATION: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION }}
+          RESTORIX_DEVELOPMENT_TEAM: ${{ secrets.MACOS_DEVELOPMENT_TEAM || secrets.MACOS_NOTARY_TEAM_ID }}
+          RESTORIX_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          RESTORIX_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+          RESTORIX_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+          RESTORIX_NOTARIZE: ${{ steps.signing_policy.outputs.notarize }}
+          RESTORIX_STAPLE: ${{ steps.signing_policy.outputs.staple }}
+          RESTORIX_GATEKEEPER_VERIFY: ${{ steps.signing_policy.outputs.gatekeeper_verify }}
+          RESTORIX_XCODEBUILD_CODE_SIGNING_ALLOWED: ${{ steps.signing_policy.outputs.xcodebuild_code_signing_allowed }}
         run: bash script/verify_release_package.sh
 
       - name: Delete signing keychain
         if: always()
+        env:
+          RESTORIX_SIGNING_KEYCHAIN: ${{ steps.signing_keychain.outputs.keychain }}
         run: |
           if [[ -n "${RESTORIX_SIGNING_KEYCHAIN:-}" ]]; then
             security delete-keychain "$RESTORIX_SIGNING_KEYCHAIN" || true
           fi
 
       - name: Upload release artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: Restorix-macos-${{ github.ref_name }}
           path: |
@@ -138,6 +163,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
+          RESTORIX_PACKAGE_MODE: ${{ steps.signing_policy.outputs.package_mode }}
         run: |
           if [[ "${RESTORIX_PACKAGE_MODE:-}" != "developer-id" ]]; then
             echo "Refusing to publish ${GITHUB_REF_NAME}: public v* release assets must be Developer ID signed and notarized." >&2

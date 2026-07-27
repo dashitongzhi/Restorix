@@ -14,6 +14,11 @@ fn successful_sources_produce_a_protected_summary() {
 
     let result = scan_with_sources(&config, &docker, &backup, &clock);
 
+    assert_eq!(result.schema_version, 1);
+    assert_eq!(
+        serde_json::to_value(&result).unwrap()["schema_version"],
+        serde_json::json!(1)
+    );
     assert!(result.errors.is_empty());
     assert_eq!(result.summary.total_volumes, 1);
     assert_eq!(result.summary.protected_count, 1);

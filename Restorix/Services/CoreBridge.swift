@@ -33,38 +33,38 @@ final class CoreBridge: CoreBridging {
 
     func scan() async throws -> ScanResult {
         let repositories = try await listRepositories()
-        let credentials = try credentials(for: repositories)
+        let credentials = try credentials(for: repositories.filter(\.enabled))
         let data = try await run(
             arguments: ["scan", "--json"],
             environment: credentials,
             timeout: scanTimeoutSeconds,
             accepting: [0, 2]
         )
-        return try JSONDecoder.restorix.decode(ScanResult.self, from: data)
+        return try decode(ScanResult.self, from: data, command: "scan --json")
     }
 
     func listRepositories() async throws -> [BackupRepository] {
         let data = try await run(arguments: ["repo", "list", "--json"])
-        return try JSONDecoder.restorix.decode([BackupRepository].self, from: data)
+        return try decode([BackupRepository].self, from: data, command: "repo list --json")
     }
 
     func removeRepository(id: String) async throws -> Bool {
         let data = try await run(arguments: ["repo", "remove", id])
-        let result = try JSONDecoder.restorix.decode(RemoveRepositoryResult.self, from: data)
+        let result = try decode(RemoveRepositoryResult.self, from: data, command: "repo remove \(id)")
         return result.removed
     }
 
     func setRepositoryEnabled(id: String, enabled: Bool) async throws -> BackupRepository {
         let command = enabled ? "enable" : "disable"
         let data = try await run(arguments: ["repo", command, id])
-        return try JSONDecoder.restorix.decode(BackupRepository.self, from: data)
+        return try decode(BackupRepository.self, from: data, command: "repo \(command) \(id)")
     }
 
     func testRepository(id: String) async throws -> [BackupSnapshot] {
         let repositories = try await listRepositories()
         let credentials = try credentials(for: repositories.filter { $0.id == id })
         let data = try await run(arguments: ["repo", "test", id, "--json"], environment: credentials)
-        return try JSONDecoder.restorix.decode([BackupSnapshot].self, from: data)
+        return try decode([BackupSnapshot].self, from: data, command: "repo test \(id) --json")
     }
 
     func addRepository(name: String, location: String, passwordEnvKey: String?, password: String?, expectedHostname: String, enabled: Bool) async throws -> BackupRepository {
@@ -82,7 +82,7 @@ final class CoreBridge: CoreBridging {
         }
 
         let data = try await run(arguments: arguments)
-        let repository = try JSONDecoder.restorix.decode(BackupRepository.self, from: data)
+        let repository = try decode(BackupRepository.self, from: data, command: "repo add")
         if let password, let passwordEnvKey, !password.isEmpty {
             do {
                 try credentialStore.save(password, for: passwordEnvKey)
@@ -96,7 +96,7 @@ final class CoreBridge: CoreBridging {
 
     func exportMarkdownReport(language: AppLanguage = .english) async throws -> String {
         let repositories = try await listRepositories()
-        let credentials = try credentials(for: repositories)
+        let credentials = try credentials(for: repositories.filter(\.enabled))
         let data = try await run(
             arguments: ["report", "markdown", "--language", language.rawValue],
             environment: credentials,
@@ -108,7 +108,7 @@ final class CoreBridge: CoreBridging {
 
     func getConfig() async throws -> AppSettings {
         let data = try await run(arguments: ["config", "get", "--json"])
-        return try JSONDecoder.restorix.decode(AppSettings.self, from: data)
+        return try decode(AppSettings.self, from: data, command: "config get --json")
     }
 
     func commitSettings(_ draft: SettingsDraft) async throws -> AppSettings {
@@ -118,7 +118,7 @@ final class CoreBridge: CoreBridging {
         )
         do {
             let data = try await run(arguments: ["config", "commit", payload])
-            return try JSONDecoder.restorix.decode(AppSettings.self, from: data)
+            return try decode(AppSettings.self, from: data, command: "config commit")
         } catch let error as CoreBridgeError where error.isUnsupportedConfigCommit {
             return try await commitSettingsUsingLegacySet(draft)
         }
@@ -130,7 +130,7 @@ final class CoreBridge: CoreBridging {
             arguments: ["config", "get", "--json"],
             executableURL: executableURL
         )
-        let previous = try JSONDecoder.restorix.decode(AppSettings.self, from: previousData)
+        let previous = try decode(AppSettings.self, from: previousData, command: "config get --json")
         let changes = legacySettingsChanges(from: previous, to: draft)
         guard !changes.isEmpty else { return previous }
 
@@ -154,7 +154,7 @@ final class CoreBridge: CoreBridging {
             throw error
         }
 
-        return try JSONDecoder.restorix.decode(AppSettings.self, from: lastData)
+        return try decode(AppSettings.self, from: lastData, command: "config set")
     }
 
     private func legacySettingsChanges(
@@ -201,6 +201,22 @@ final class CoreBridge: CoreBridging {
         return credentials
     }
 
+    private func decode<Value: Decodable>(
+        _ type: Value.Type,
+        from data: Data,
+        command: String
+    ) throws -> Value {
+        do {
+            return try JSONDecoder.restorix.decode(type, from: data)
+        } catch let error as DecodingError {
+            throw CoreBridgeError.invalidResponse(
+                command: command,
+                path: error.restorixCodingPath,
+                reason: error.restorixReason
+            )
+        }
+    }
+
 }
 
 extension JSONDecoder {
@@ -211,4 +227,40 @@ extension JSONDecoder {
 
 private struct RemoveRepositoryResult: Codable {
     let removed: Bool
+}
+
+private extension DecodingError {
+    var restorixContext: DecodingError.Context {
+        switch self {
+        case .typeMismatch(_, let context),
+             .valueNotFound(_, let context),
+             .keyNotFound(_, let context),
+             .dataCorrupted(let context):
+            return context
+        @unknown default:
+            return DecodingError.Context(codingPath: [], debugDescription: String(describing: self))
+        }
+    }
+
+    var restorixCodingPath: String {
+        var codingPath = restorixContext.codingPath
+        if case .keyNotFound(let key, _) = self {
+            codingPath.append(key)
+        }
+        let components = codingPath.map { key in
+            if let index = key.intValue {
+                return "[\(index)]"
+            }
+            return key.stringValue
+        }
+        return components.isEmpty ? "<root>" : components.joined(separator: ".")
+    }
+
+    var restorixReason: String {
+        let context = restorixContext
+        if let underlying = context.underlyingError {
+            return "\(context.debugDescription) (\(underlying.localizedDescription))"
+        }
+        return context.debugDescription
+    }
 }

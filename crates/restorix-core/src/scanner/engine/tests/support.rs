@@ -170,7 +170,11 @@ impl BackupSource for FakeBackup {
         self.status.clone()
     }
 
-    fn snapshots(&self, _repository: &BackupRepository) -> Result<Vec<BackupSnapshot>> {
+    fn snapshots(
+        &self,
+        _repository: &BackupRepository,
+        _credential_env_keys: &[String],
+    ) -> Result<Vec<BackupSnapshot>> {
         if let Some(error) = &self.failure {
             return Err(RestorixError::Config(error.clone()));
         }

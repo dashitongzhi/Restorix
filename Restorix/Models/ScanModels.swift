@@ -6,6 +6,16 @@ enum HealthStatus: String, Codable {
     case Stale
     case Unknown
     case Error
+
+    init(from decoder: Decoder) throws {
+        let value = try decoder.singleValueContainer().decode(String.self)
+        self = Self(rawValue: value) ?? .Unknown
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 enum MatchConfidence: String, Codable {
     case Exact
@@ -14,6 +24,16 @@ enum MatchConfidence: String, Codable {
     case VolumeName
     case Low
     case None
+
+    init(from decoder: Decoder) throws {
+        let value = try decoder.singleValueContainer().decode(String.self)
+        self = Self(rawValue: value) ?? .None
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 struct VolumeHealth: Codable, Identifiable {
     var id: String { volume.name }
@@ -71,6 +91,7 @@ struct ScanSummary: Codable {
 }
 
 struct ScanResult: Codable {
+    let schemaVersion: Int
     let summary: ScanSummary
     let containers: [DockerContainer]
     let volumes: [DockerVolume]
@@ -81,6 +102,7 @@ struct ScanResult: Codable {
     let errors: [Diagnostic]
 
     enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
         case summary
         case containers
         case volumes
@@ -89,5 +111,40 @@ struct ScanResult: Codable {
         case volumeHealth = "volume_health"
         case warnings
         case errors
+    }
+
+    init(
+        schemaVersion: Int = 1,
+        summary: ScanSummary,
+        containers: [DockerContainer],
+        volumes: [DockerVolume],
+        repositories: [BackupRepository],
+        snapshots: [BackupSnapshot],
+        volumeHealth: [VolumeHealth],
+        warnings: [Diagnostic],
+        errors: [Diagnostic]
+    ) {
+        self.schemaVersion = schemaVersion
+        self.summary = summary
+        self.containers = containers
+        self.volumes = volumes
+        self.repositories = repositories
+        self.snapshots = snapshots
+        self.volumeHealth = volumeHealth
+        self.warnings = warnings
+        self.errors = errors
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        summary = try container.decode(ScanSummary.self, forKey: .summary)
+        containers = try container.decode([DockerContainer].self, forKey: .containers)
+        volumes = try container.decode([DockerVolume].self, forKey: .volumes)
+        repositories = try container.decode([BackupRepository].self, forKey: .repositories)
+        snapshots = try container.decode([BackupSnapshot].self, forKey: .snapshots)
+        volumeHealth = try container.decode([VolumeHealth].self, forKey: .volumeHealth)
+        warnings = try container.decode([Diagnostic].self, forKey: .warnings)
+        errors = try container.decode([Diagnostic].self, forKey: .errors)
     }
 }

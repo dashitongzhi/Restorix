@@ -119,6 +119,7 @@ enum CoreBridgeError: LocalizedError {
     case commandTimedOut(String, Int)
     case launchFailed(String, String)
     case missingKeychainCredential(String)
+    case invalidResponse(command: String, path: String, reason: String)
 
     var isUnsupportedConfigCommit: Bool {
         guard case .commandFailed(let command, _, let message) = self,
@@ -143,6 +144,8 @@ enum CoreBridgeError: LocalizedError {
             return "Restorix could not launch the CLI at \(path). \(message)"
         case .missingKeychainCredential(let key):
             return "No Keychain credential is available for \(key). Add or update the repository password in Restorix."
+        case .invalidResponse(let command, let path, let reason):
+            return "Restorix received an invalid response from `\(command)` at \(path): \(reason)"
         }
     }
 }

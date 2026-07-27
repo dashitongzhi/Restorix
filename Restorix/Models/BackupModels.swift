@@ -5,6 +5,16 @@ enum BackupTool: String, Codable {
     case Borg
     case Rclone
     case Unknown
+
+    init(from decoder: Decoder) throws {
+        let value = try decoder.singleValueContainer().decode(String.self)
+        self = Self(rawValue: value) ?? .Unknown
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 struct BackupRepository: Codable, Identifiable {
     let id: String

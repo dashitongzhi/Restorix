@@ -94,7 +94,12 @@ pub fn test_repository(config_store: &ConfigStore, repo_id: &str) -> Result<Vec<
         .iter()
         .find(|repo| repo.id == repo_id)
         .ok_or_else(|| RestorixError::Config(format!("Repository not found: {repo_id}")))?;
-    ResticClient::new().snapshots(repo)
+    let credential_env_keys = config
+        .repositories
+        .iter()
+        .filter_map(|repository| repository.password_env_key.clone())
+        .collect::<Vec<_>>();
+    ResticClient::new().snapshots_with_credential_keys(repo, &credential_env_keys)
 }
 
 pub fn get_config(config_store: &ConfigStore) -> Result<AppConfig> {

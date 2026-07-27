@@ -3,14 +3,24 @@ import Foundation
 @main
 struct CLICommandRunnerSmoke {
     static func main() async throws {
-        guard CommandLine.arguments.count == 2 else {
+        guard CommandLine.arguments.count == 3 else {
             throw SmokeError.missingFixture
         }
 
         let fixtureURL = URL(fileURLWithPath: CommandLine.arguments[1])
+        let rustContractURL = URL(fileURLWithPath: CommandLine.arguments[2])
         let runner = CLICommandRunner(baseEnvironment: [
             "PATH": "/usr/bin:/bin:/usr/sbin:/sbin"
         ])
+
+        let rustContract = try JSONDecoder.restorix.decode(
+            ScanResult.self,
+            from: Data(contentsOf: rustContractURL)
+        )
+        try require(rustContract.schemaVersion == 1, "Rust contract schema version")
+        try require(rustContract.summary.platform == .MacOS, "Rust contract platform")
+        try require(rustContract.volumeHealth.first?.status == .Protected, "Rust contract health status")
+        try require(rustContract.volumeHealth.first?.reason.code == .recentSnapshot, "Rust contract diagnostic")
 
         let success = try await runner.run(
             executableURL: fixtureURL,
@@ -74,24 +84,83 @@ struct CLICommandRunnerSmoke {
 
         let bridge = CoreBridge(cliURL: fixtureURL)
         let scan = try await bridge.scan()
+        try require(scan.schemaVersion == 1, "current scan schema version")
         try require(scan.summary.errorCount == 2, "bridge preserves scan summary")
         try require(scan.errors.map(\.message) == ["docker unavailable"], "bridge accepts scan exit code 2")
-        try require(scan.volumeHealth.first?.reason.message == "legacy volume error", "legacy volume reason")
+        try require(scan.volumeHealth.first?.reason.message == "current volume error", "current diagnostic object")
+
+        var legacyScanObject = try requireDictionary(JSONSerialization.jsonObject(with: JSONEncoder().encode(scan)))
+        legacyScanObject.removeValue(forKey: "schema_version")
+        let legacyScanData = try JSONSerialization.data(withJSONObject: legacyScanObject)
+        let legacyScan = try JSONDecoder.restorix.decode(ScanResult.self, from: legacyScanData)
+        try require(legacyScan.schemaVersion == 1, "missing scan schema defaults to version 1")
+
+        legacyScanObject["schema_version"] = 7
+        let versionedScanData = try JSONSerialization.data(withJSONObject: legacyScanObject)
+        let versionedScan = try JSONDecoder.restorix.decode(ScanResult.self, from: versionedScanData)
+        try require(versionedScan.schemaVersion == 7, "explicit scan schema version")
+
+        let futureHealth = try JSONDecoder().decode(
+            HealthStatus.self,
+            from: Data(#""FutureStatus""#.utf8)
+        )
+        try require(futureHealth == .Unknown, "future health status fallback")
+        let futureConfidence = try JSONDecoder().decode(
+            MatchConfidence.self,
+            from: Data(#""FutureConfidence""#.utf8)
+        )
+        try require(futureConfidence == .None, "future match confidence fallback")
+        let futurePlatform = try JSONDecoder().decode(
+            Platform.self,
+            from: Data(#""FuturePlatform""#.utf8)
+        )
+        try require(futurePlatform == .Unknown, "future platform fallback")
+        let futureTool = try JSONDecoder().decode(
+            BackupTool.self,
+            from: Data(#""FutureTool""#.utf8)
+        )
+        try require(futureTool == .Unknown, "future backup tool fallback")
 
         let report = try await bridge.exportMarkdownReport()
         try require(report.contains("## Errors"), "bridge accepts report exit code 2")
 
         let reportRunner = ReportCredentialRunner()
+        let credentialStore = FixtureCredentialStore()
         let credentialBridge = CoreBridge(
             cliURL: fixtureURL,
             commandRunner: reportRunner,
-            credentialStore: FixtureCredentialStore()
+            credentialStore: credentialStore
         )
+        _ = try await credentialBridge.scan()
         _ = try await credentialBridge.exportMarkdownReport()
+        try require(
+            reportRunner.scanEnvironment["RESTIC_PASSWORD"] == "fixture-secret",
+            "scan receives enabled repository credentials"
+        )
         try require(
             reportRunner.reportEnvironment["RESTIC_PASSWORD"] == "fixture-secret",
             "report receives repository credentials"
         )
+        try require(
+            reportRunner.scanEnvironment["DISABLED_PASSWORD"] == nil
+                && reportRunner.reportEnvironment["DISABLED_PASSWORD"] == nil,
+            "disabled repository credential is not forwarded"
+        )
+        try require(
+            !credentialStore.requestedKeys.contains("DISABLED_PASSWORD"),
+            "disabled repository credential is not read"
+        )
+
+        do {
+            _ = try await CoreBridge(
+                cliURL: fixtureURL,
+                commandRunner: InvalidScanRunner()
+            ).scan()
+            throw SmokeError.expectationFailed("invalid scan response must throw")
+        } catch CoreBridgeError.invalidResponse(_, let path, let reason) {
+            try require(path.contains("summary") && path.contains("scanned_at"), "decoding error coding path")
+            try require(reason.contains("No value associated with key"), "decoding error reason")
+        }
 
         let renderedEnglish = MarkdownReportRenderer.render(
             scan,
@@ -143,6 +212,13 @@ struct CLICommandRunnerSmoke {
         guard condition() else {
             throw SmokeError.expectationFailed(label)
         }
+    }
+
+    private static func requireDictionary(_ value: Any) throws -> [String: Any] {
+        guard let dictionary = value as? [String: Any] else {
+            throw SmokeError.expectationFailed("scan JSON dictionary")
+        }
+        return dictionary
     }
 
     private enum SmokeError: LocalizedError {

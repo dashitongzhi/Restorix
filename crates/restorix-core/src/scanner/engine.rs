@@ -1,6 +1,8 @@
 use crate::diagnostic::{Diagnostic, DiagnosticCode};
 use crate::docker::client::DockerClient;
-use crate::models::{HealthStatus, Platform, ScanResult, ScanSummary, VolumeHealth};
+use crate::models::{
+    HealthStatus, Platform, ScanResult, ScanSummary, VolumeHealth, SCAN_RESULT_SCHEMA_VERSION,
+};
 use crate::restic::client::ResticClient;
 use crate::scanner::health::{calculate_volume_health, mark_repository_failures_unknown};
 use crate::scanner::sources::{BackupSource, Clock, ConfigSource, DockerSource, SystemClock};
@@ -104,6 +106,10 @@ fn scan_with_sources(
     };
 
     let repositories = config.repositories.clone();
+    let credential_env_keys = repositories
+        .iter()
+        .filter_map(|repository| repository.password_env_key.clone())
+        .collect::<Vec<_>>();
     add_context_warnings(&mut warnings, &volumes, &repositories);
     let mut snapshots = Vec::new();
 
@@ -111,7 +117,7 @@ fn scan_with_sources(
 
     if restic_status.installed {
         for repo in repositories.iter().filter(|repo| repo.enabled) {
-            match backup.snapshots(repo) {
+            match backup.snapshots(repo, &credential_env_keys) {
                 Ok(mut repo_snapshots) => snapshots.append(&mut repo_snapshots),
                 Err(error) => {
                     repository_scan_failed = true;
@@ -157,6 +163,7 @@ fn scan_with_sources(
     });
 
     ScanResult {
+        schema_version: SCAN_RESULT_SCHEMA_VERSION,
         summary,
         containers,
         volumes,

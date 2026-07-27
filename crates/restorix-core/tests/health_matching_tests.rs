@@ -32,6 +32,45 @@ fn path_matching_prefers_exact_parent_and_child_matches() {
 }
 
 #[test]
+fn root_snapshot_path_is_not_a_reliable_parent_match() {
+    let volume = volume(
+        "postgres_data",
+        "/var/lib/docker/volumes/postgres_data/_data",
+    );
+
+    assert_eq!(match_path(&volume, "/"), MatchConfidence::Low);
+}
+
+#[test]
+fn non_root_snapshot_parent_path_remains_reliable() {
+    let volume = volume(
+        "postgres_data",
+        "/var/lib/docker/volumes/postgres_data/_data",
+    );
+
+    assert_eq!(match_path(&volume, "/var/lib"), MatchConfidence::ParentPath);
+}
+
+#[test]
+fn root_snapshot_stays_unknown_even_with_loose_matching() {
+    let now = Utc.with_ymd_and_hms(2026, 5, 15, 10, 0, 0).unwrap();
+    let health = calculate_volume_health(
+        &[volume(
+            "postgres_data",
+            "/var/lib/docker/volumes/postgres_data/_data",
+        )],
+        &[repo()],
+        &[snapshot("snap-root", "2026-05-15T08:00:00Z", "/")],
+        72,
+        true,
+        now,
+    );
+
+    assert_eq!(health[0].status, HealthStatus::Unknown);
+    assert_eq!(health[0].confidence, MatchConfidence::Low);
+}
+
+#[test]
 fn missing_match_marks_volume_unprotected() {
     let now = Utc.with_ymd_and_hms(2026, 5, 15, 10, 0, 0).unwrap();
     let health = calculate_volume_health(
@@ -96,5 +135,28 @@ fn volume_name_match_is_unknown_without_loose_matching() {
     );
 
     assert_eq!(health[0].status, HealthStatus::Unknown);
+    assert_eq!(health[0].confidence, MatchConfidence::VolumeName);
+}
+
+#[test]
+fn volume_name_match_is_protected_with_loose_matching() {
+    let now = Utc.with_ymd_and_hms(2026, 5, 15, 10, 0, 0).unwrap();
+    let health = calculate_volume_health(
+        &[volume(
+            "postgres_data",
+            "/var/lib/docker/volumes/postgres_data/_data",
+        )],
+        &[repo()],
+        &[snapshot(
+            "snap-1",
+            "2026-05-15T08:00:00Z",
+            "/Users/me/backups/postgres_data",
+        )],
+        72,
+        true,
+        now,
+    );
+
+    assert_eq!(health[0].status, HealthStatus::Protected);
     assert_eq!(health[0].confidence, MatchConfidence::VolumeName);
 }
