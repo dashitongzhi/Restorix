@@ -20,11 +20,14 @@ verify_universal_binary() {
     return 1
   fi
 
-  if ! lipo -verify_arch arm64 x86_64 "$binary"; then
-    echo "[restorix-release] ${label} must contain both arm64 and x86_64 slices." >&2
-    lipo -archs "$binary" >&2 || true
-    return 1
-  fi
+  local architecture
+  for architecture in arm64 x86_64; do
+    if ! lipo "$binary" -verify_arch "$architecture"; then
+      echo "[restorix-release] ${label} must contain both arm64 and x86_64 slices." >&2
+      lipo -archs "$binary" >&2 || true
+      return 1
+    fi
+  done
 
   echo "[restorix-release] ${label} architectures: $(lipo -archs "$binary")"
 }
