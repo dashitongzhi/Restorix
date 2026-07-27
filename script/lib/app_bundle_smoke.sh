@@ -111,6 +111,7 @@ verify_app_launch_and_cli_staging() {
 
 run_app_verifier_action() {
   local action="$1"
+  local selected_config_path="${2:-${CONFIG_PATH}}"
   local app_stdout="${WORK_DIR}/launch-at-login-${action}.stdout"
   local app_stderr="${WORK_DIR}/launch-at-login-${action}.stderr"
   local app_status="${WORK_DIR}/launch-at-login-${action}.status"
@@ -124,7 +125,7 @@ run_app_verifier_action() {
     /usr/bin/open -n -g \
       --stdout "${app_stdout}" --stderr "${app_stderr}" \
       --env "HOME=${HOME_DIR}" --env "CFFIXED_USER_HOME=${HOME_DIR}" \
-      --env "RESTORIX_CONFIG=${CONFIG_PATH}" \
+      --env "RESTORIX_CONFIG=${selected_config_path}" \
       --env "RESTORIX_RELEASE_VERIFY_LAUNCH_AT_LOGIN=${action}" \
       --env "RESTORIX_RELEASE_STATUS_FILE=${app_status}" \
       "${APP_BUNDLE}" || open_status=$?
@@ -154,8 +155,9 @@ run_app_verifier_action() {
 
 assert_config_launch_at_login() {
   local expected="$1"
+  local selected_config_path="${2:-${CONFIG_PATH}}"
   local config_json
-  config_json="$(RESTORIX_CONFIG="${CONFIG_PATH}" "${RESTORIX_BIN}" config get --json)"
+  config_json="$(RESTORIX_CONFIG="${selected_config_path}" "${RESTORIX_BIN}" config get --json)"
   printf '%s\n' "${config_json}" | grep -q "\"launch_at_login\": ${expected}" || {
     echo "Expected launch_at_login to be ${expected}, but config was:" >&2
     printf '%s\n' "${config_json}" >&2
@@ -164,15 +166,18 @@ assert_config_launch_at_login() {
 }
 
 verify_launch_at_login_flow() {
+  local launch_config_path="${WORK_DIR}/launch-at-login-config.json"
+
   log "Verifying packaged launch-at-login registration, relaunch sync, and cleanup."
+  printf '{}\n' > "${launch_config_path}"
   # shellcheck disable=SC2034 # Read by the sourcing orchestrator's cleanup trap.
   LAUNCH_AT_LOGIN_VERIFICATION_STARTED=1
-  run_app_verifier_action disable
-  assert_config_launch_at_login false
-  run_app_verifier_action enable
-  assert_config_launch_at_login true
-  run_app_verifier_action confirm-enabled
-  assert_config_launch_at_login true
-  run_app_verifier_action disable
-  assert_config_launch_at_login false
+  run_app_verifier_action disable "${launch_config_path}"
+  assert_config_launch_at_login false "${launch_config_path}"
+  run_app_verifier_action enable "${launch_config_path}"
+  assert_config_launch_at_login true "${launch_config_path}"
+  run_app_verifier_action confirm-enabled "${launch_config_path}"
+  assert_config_launch_at_login true "${launch_config_path}"
+  run_app_verifier_action disable "${launch_config_path}"
+  assert_config_launch_at_login false "${launch_config_path}"
 }
